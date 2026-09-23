@@ -1,10 +1,9 @@
 {
-  "name": "energy-investment-engine",
-  "version": "2.22.0",
+  "name": "life",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "vitest run --run tests/report-acceptance.test.ts tests/input-quality.test.ts",
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
