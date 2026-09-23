@@ -1,153 +1,104 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-type Section = "Today" | "Inbox" | "Calendar" | "Projects" | "Notes";
-type Task = {
-  id: string;
-  title: string;
-  detail: string;
-  section: Section;
-  priority: "high" | "normal";
-  due?: string;
-  project?: string;
+type View = "Today" | "Needs attention" | "Inbox" | "Calendar" | "Projects" | "Documents";
+type Item = {
+  id: string; title: string; summary: string; source: string; sourceType: "Email"|"Calendar"|"Document"|"Project";
+  priority: "High"|"Medium"|"Low"; due: string; view: View;
 };
 
-const seed: Task[] = [
-  { id: "1", title: "Review today's commitments", detail: "3 items need attention", section: "Today", priority: "high", due: "Today" },
-  { id: "2", title: "Follow up on important email", detail: "Action suggested from inbox", section: "Inbox", priority: "high", due: "Today" },
-  { id: "3", title: "Prepare for next meeting", detail: "Tomorrow · 09:00", section: "Calendar", priority: "normal", due: "Tomorrow" },
-  { id: "4", title: "Energy project review", detail: "Open project · next action needed", section: "Projects", priority: "high", project: "Work" },
-  { id: "5", title: "Ideas & things to remember", detail: "Personal notes", section: "Notes", priority: "normal" },
+const items: Item[] = [
+  {id:"a1",title:"Reply to SIJ — contract comment",summary:"Legal team sent 3 comments. They are waiting for your response before the next contract version.",source:"Gmail · Luka",sourceType:"Email",priority:"High",due:"Today · 16:00",view:"Needs attention"},
+  {id:"a2",title:"15:00 meeting — prepare 3 decisions",summary:"Energy portfolio meeting. LIFE identified three open decisions from the previous meeting notes.",source:"Calendar · Energy",sourceType:"Calendar",priority:"High",due:"Today · 15:00",view:"Needs attention"},
+  {id:"a3",title:"Invoice €518k still outstanding",summary:"Invoice was issued 9 days ago and is still marked unpaid in the demo finance documents.",source:"Documents · Finance",sourceType:"Document",priority:"High",due:"Today",view:"Needs attention"},
+  {id:"a4",title:"Review TAB BESS performance",summary:"5 MWh / 2 MW asset. Monthly performance pack is ready for review.",source:"Project · TAB Prevalje",sourceType:"Project",priority:"Medium",due:"Tomorrow",view:"Projects"},
+  {id:"a5",title:"Board material — final comments",summary:"Draft board pack has two unresolved comments.",source:"Documents · Board",sourceType:"Document",priority:"Medium",due:"Thu",view:"Documents"},
+  {id:"a6",title:"Follow up with partner",summary:"Waiting for a response after the last commercial discussion.",source:"Gmail · Partner",sourceType:"Email",priority:"Medium",due:"Fri",view:"Inbox"},
+  {id:"a7",title:"Daily planning",summary:"Review priorities and protect focus time.",source:"Calendar · Personal",sourceType:"Calendar",priority:"Low",due:"09:00",view:"Calendar"},
+  {id:"a8",title:"Focus block",summary:"Protected deep-work block.",source:"Calendar · Personal",sourceType:"Calendar",priority:"Low",due:"11:30",view:"Calendar"}
 ];
 
 const events = [
-  { time: "09:00", title: "Daily planning", meta: "Today · Personal" },
-  { time: "11:30", title: "Focus block", meta: "Today · 90 min" },
-  { time: "15:00", title: "Review & follow-ups", meta: "Today · Personal" },
-  { time: "17:30", title: "Family time", meta: "Today · Personal" },
+  ["09:00","Daily planning","Personal"],
+  ["11:30","Focus block","90 min"],
+  ["15:00","Energy portfolio meeting","3 decisions"],
+  ["17:30","Family time","Personal"]
 ];
 
-const nav: Section[] = ["Today", "Inbox", "Calendar", "Projects", "Notes"];
-
 export default function LifePage() {
-  const [section, setSection] = useState<Section>("Today");
-  const [tasks, setTasks] = useState<Task[]>(seed);
-  const [done, setDone] = useState<string[]>([]);
-  const [query, setQuery] = useState("");
-  const [newItem, setNewItem] = useState("");
-  const [notice, setNotice] = useState("");
-  const [focus, setFocus] = useState(false);
+  const [view,setView] = useState<View>("Today");
+  const [selected,setSelected] = useState<Item|null>(null);
+  const [done,setDone] = useState<string[]>([]);
+  const [query,setQuery] = useState("");
+  const [focus,setFocus] = useState(false);
+  const [notice,setNotice] = useState("");
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("life-state-v2");
-      if (saved) {
-        const p = JSON.parse(saved);
-        if (Array.isArray(p.tasks)) setTasks(p.tasks);
-        if (Array.isArray(p.done)) setDone(p.done);
-      }
-    } catch {}
-  }, []);
+  const attention = items.filter(x=>x.view==="Needs attention" && !done.includes(x.id));
+  const visible = useMemo(()=>{
+    let list: Item[];
+    if(view==="Today") list = items.filter(x=>["Needs attention","Calendar"].includes(x.view));
+    else if(view==="Needs attention") list = attention;
+    else list = items.filter(x=>x.view===view);
+    const q=query.toLowerCase().trim();
+    return q ? list.filter(x=>(x.title+" "+x.summary+" "+x.source).toLowerCase().includes(q)) : list;
+  },[view,query,done]);
 
-  useEffect(() => {
-    localStorage.setItem("life-state-v2", JSON.stringify({ tasks, done }));
-  }, [tasks, done]);
+  const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
+  const toggle=(id:string)=>setDone(x=>x.includes(id)?x.filter(y=>y!==id):[...x,id]);
 
-  const open = tasks.filter(t => !done.includes(t.id));
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return tasks.filter(t => t.section === section && (!q || (t.title + " " + t.detail).toLowerCase().includes(q)));
-  }, [tasks, section, query]);
+  return <main className="life">
+    <style>{`
+      *{box-sizing:border-box}body{margin:0;background:#f6f7f8;color:#17202a;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",Inter,system-ui,sans-serif}
+      button,input{font:inherit}.life{min-height:100vh}.shell{width:min(1280px,calc(100% - 28px));margin:auto;padding:18px 0 35px}
+      .top{height:48px;display:flex;align-items:center;justify-content:space-between}.brand{font-size:25px;font-weight:850;letter-spacing:-1px}.status{font-size:11px;color:#66737e;background:#e9edf0;padding:7px 10px;border-radius:99px}
+      .hero{padding:48px 0 30px}.eyebrow{font-size:11px;letter-spacing:.14em;font-weight:850;color:#89949d}.hero h1{font-size:clamp(42px,6vw,70px);line-height:.94;letter-spacing:-4px;margin:9px 0 14px}.hero p{max-width:760px;color:#687681;font-size:17px;line-height:1.55;margin:0}
+      .layout{display:grid;grid-template-columns:190px minmax(0,1fr) 285px;gap:14px}.card{background:#fff;border:1px solid #e1e5e8;border-radius:20px;box-shadow:0 8px 30px rgba(25,38,50,.045)}
+      .nav{padding:9px}.nav h4{margin:8px 12px 5px;font-size:10px;color:#9aa3aa;text-transform:uppercase;letter-spacing:.1em}.nav button{width:100%;border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:10px;color:#64727d;font-weight:720;cursor:pointer}.nav button.active{background:#17202a;color:white}.nav .attention{display:flex;justify-content:space-between}.badge{font-size:10px;background:#eef1f3;padding:3px 6px;border-radius:99px}.nav .active .badge{background:#39434b;color:#fff}
+      .main{padding:19px}.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.head h2{font-size:21px;margin:0 0 3px}.muted{font-size:12px;color:#89949d}.search{width:180px;border:1px solid #dce1e5;border-radius:10px;padding:9px 11px;outline:none;background:#fafbfc}
+      .brief{border:1px solid #e4e8eb;background:#f8fafb;border-radius:14px;padding:14px;margin-bottom:14px}.brief b{font-size:13px}.brief p{margin:5px 0 0;font-size:12px;line-height:1.5;color:#6d7983}
+      .item{display:flex;gap:12px;padding:15px 3px;border-top:1px solid #edf0f2;cursor:pointer}.check{width:24px;height:24px;flex:0 0 24px;border:1.5px solid #b9c2c9;border-radius:50%;background:white;display:grid;place-items:center;cursor:pointer}.check.done{background:#17202a;color:white;border-color:#17202a}.itemmain{min-width:0;flex:1}.itemtop{display:flex;justify-content:space-between;gap:10px}.title{font-size:14px;font-weight:760}.strike{text-decoration:line-through;color:#8c969e}.due{font-size:11px;color:#7a8791;white-space:nowrap}.summary{font-size:12px;color:#77848e;margin-top:4px;line-height:1.4}.source{font-size:10px;color:#9a4f58;margin-top:7px;font-weight:750}
+      .side{padding:17px}.side h3{font-size:15px;margin:2px 0 12px}.metric{padding:13px 0;border-top:1px solid #edf0f2}.metric:first-of-type{border-top:0}.metric b{font-size:25px;display:block}.metric span{font-size:11px;color:#85919a}.event{display:flex;gap:12px;padding:11px 0;border-top:1px solid #edf0f2}.time{width:42px;font-size:11px;font-weight:800;color:#7b8790}.event b{font-size:12px}.event span{display:block;color:#89949d;font-size:10px;margin-top:3px}
+      .cta{width:100%;border:0;background:#17202a;color:#fff;border-radius:10px;padding:11px;margin-top:12px;font-weight:750;cursor:pointer}.secondary{border:1px solid #dce1e5;background:white;border-radius:10px;padding:9px 11px;font-weight:700;cursor:pointer}
+      .drawer{position:fixed;right:16px;top:16px;bottom:16px;width:min(430px,calc(100% - 32px));background:white;border:1px solid #dce1e5;border-radius:20px;box-shadow:0 20px 70px rgba(0,0,0,.18);z-index:10;padding:22px;overflow:auto}.close{float:right;border:0;background:#eef1f3;border-radius:50%;width:34px;height:34px;cursor:pointer}.drawer .label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#909aa3;font-weight:800;margin-top:28px}.drawer h2{font-size:26px;letter-spacing:-1px;margin:9px 0}.drawer p{color:#687681;line-height:1.6;font-size:14px}.sourcebox{background:#f6f8f9;border-radius:12px;padding:13px;margin-top:16px;font-size:12px;color:#687681}.focus{position:fixed;inset:0;background:#f6f7f8;z-index:20;display:grid;place-items:center}.focusbox{text-align:center}.focusbox h2{font-size:62px;letter-spacing:-4px;margin:0}.timer{font-size:80px;font-weight:850;letter-spacing:-5px;margin:24px 0}
+      .notice{position:fixed;right:18px;bottom:18px;background:#17202a;color:white;padding:11px 14px;border-radius:11px;font-size:12px;z-index:30}
+      @media(max-width:1000px){.layout{grid-template-columns:155px minmax(0,1fr)}.side{grid-column:2}}@media(max-width:680px){.shell{width:calc(100% - 18px)}.hero{padding:32px 0 22px}.hero h1{letter-spacing:-2.5px}.layout{grid-template-columns:1fr}.nav{display:flex;overflow:auto;gap:3px}.nav h4{display:none}.nav button{white-space:nowrap;width:auto}.side{grid-column:auto}.head{flex-direction:column}.search{width:100%}.itemtop{flex-direction:column;gap:4px}.due{white-space:normal}}
+    `}</style>
 
-  const notify = (message: string) => {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 2200);
-  };
+    <div className="shell">
+      <header className="top"><div className="brand">LIFE</div><div className="status">PRIVATE · DEMO MODE</div></header>
+      <section className="hero"><div className="eyebrow">GOOD MORNING, ALEŠ</div><h1>Your life.<br/>Under control.</h1><p>LIFE brings together what matters from your inbox, calendar, documents and projects — then shows you what actually needs your attention.</p></section>
 
-  const toggle = (id: string) => setDone(x => x.includes(id) ? x.filter(v => v !== id) : [...x, id]);
+      <div className="layout">
+        <nav className="card nav">
+          <h4>Workspace</h4>
+          {(["Today","Needs attention","Inbox","Calendar","Projects","Documents"] as View[]).map(v=><button key={v} className={(view===v||(v==="Needs attention"&&view==="Needs attention"))?"active":""} onClick={()=>setView(v)}>{v==="Needs attention"?<span className="attention">Needs attention <span className="badge">{attention.length}</span></span>:v}</button>)}
+          <h4>Tools</h4><button onClick={()=>setFocus(true)}>Focus mode</button><button onClick={()=>notify("Demo settings — integrations are read-only in this demo")}>Settings</button>
+        </nav>
 
-  const add = () => {
-    const title = newItem.trim();
-    if (!title) return;
-    setTasks(x => [{ id: crypto.randomUUID(), title, detail: "Added to LIFE", section, priority: "normal", due: section === "Today" ? "Today" : undefined }, ...x]);
-    setNewItem("");
-    notify("Added to LIFE");
-  };
+        <section className="card main">
+          <div className="head"><div><h2>{view}</h2><div className="muted">{view==="Today"?"Your day at a glance":"Demo data · click any item to explore it"}</div></div><input className="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search LIFE…" /></div>
+          {view==="Today" && <div className="brief"><b>AI briefing</b><p>I found {attention.length} things that need your attention. Two are time-sensitive and one is a financial follow-up. Start with the SIJ contract response.</p></div>}
+          {view==="Calendar" ? <div>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}</div> :
+           visible.length===0 ? <div className="muted" style={{padding:"25px 3px"}}>Nothing here in the demo.</div> :
+           visible.map(x=>{const isDone=done.includes(x.id);return <div className="item" key={x.id} onClick={()=>setSelected(x)}><button className={"check "+(isDone?"done":"")} onClick={e=>{e.stopPropagation();toggle(x.id)}}>{isDone?"✓":""}</button><div className="itemmain"><div className="itemtop"><div className={"title "+(isDone?"strike":"")}>{x.title}</div><div className="due">{x.due}</div></div><div className="summary">{x.summary}</div><div className="source">{x.source}</div></div></div>})}
+        </section>
 
-  const removeDone = () => {
-    const ids = new Set(done);
-    setTasks(x => x.filter(t => !ids.has(t.id)));
-    setDone([]);
-    notify("Completed items cleared");
-  };
-
-  return (
-    <main className="life">
-      <style>{`
-        *{box-sizing:border-box}html,body{margin:0;background:#f5f7f9;color:#15202b}
-        button,input{font:inherit}.life{min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",Inter,system-ui,sans-serif}
-        .shell{width:min(1240px,calc(100% - 28px));margin:auto;padding:18px 0 34px}
-        .top{height:52px;display:flex;align-items:center;justify-content:space-between}.brand{font-size:24px;font-weight:850;letter-spacing:-1px}
-        .topRight{display:flex;align-items:center;gap:8px}.pill{font-size:11px;font-weight:750;padding:7px 10px;border-radius:99px;background:#e9eef2;color:#5d6a75}
-        .iconBtn{border:1px solid #dce2e7;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer}
-        .hero{padding:42px 0 30px}.eyebrow{font-size:11px;letter-spacing:.14em;font-weight:800;color:#7b8791}
-        h1{font-size:clamp(42px,6vw,72px);line-height:.94;letter-spacing:-4px;margin:9px 0 16px}.lead{max-width:720px;font-size:17px;line-height:1.55;color:#687681}
-        .grid{display:grid;grid-template-columns:190px minmax(0,1fr) 270px;gap:14px;align-items:start}.card{background:#fff;border:1px solid #e1e6eb;border-radius:20px;box-shadow:0 8px 30px rgba(28,43,58,.05)}
-        .nav{padding:9px}.nav button{width:100%;border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:11px;color:#697681;font-weight:720;cursor:pointer}.nav button.active{background:#15202b;color:#fff}
-        .nav .sep{height:1px;background:#edf0f3;margin:8px 5px}.small{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#9aa4ad;padding:9px 12px 5px;font-weight:800}
-        .main{padding:18px}.mainHead{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.mainHead h2{margin:0;font-size:20px}.count{font-size:12px;color:#84909a}
-        .tools{display:flex;gap:7px}.search{width:150px;border:1px solid #dce2e7;border-radius:10px;padding:9px 10px;outline:none;background:#fafbfc}.secondary{border:1px solid #dce2e7;background:#fff;border-radius:10px;padding:9px 11px;font-weight:700;cursor:pointer}
-        .task{display:flex;gap:12px;padding:15px 4px;border-top:1px solid #edf0f3}.check{width:25px;height:25px;flex:0 0 25px;border:1.5px solid #b9c3cb;border-radius:50%;background:#fff;cursor:pointer;display:grid;place-items:center}.check.done{background:#15202b;color:#fff;border-color:#15202b}
-        .title{font-weight:750;font-size:14px}.strike{text-decoration:line-through;color:#8a959e}.detail{font-size:12px;color:#7b8791;margin-top:4px;line-height:1.4}.tag{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#8b5b62;font-weight:850;margin-left:8px}
-        .composer{display:flex;gap:7px;margin-top:12px}.composer input{flex:1;min-width:0;border:1px solid #dce2e7;border-radius:10px;padding:11px 12px;outline:none}.primary{border:0;background:#15202b;color:#fff;border-radius:10px;padding:10px 14px;font-weight:750;cursor:pointer}
-        .empty{padding:28px 5px;color:#87929c;font-size:13px}.calendar{padding:2px 4px}.event{display:flex;gap:16px;padding:15px 0;border-top:1px solid #edf0f3}.time{width:48px;font-size:12px;color:#77838e;font-weight:800}.event b{font-size:14px}.event span{display:block;color:#7c8791;font-size:12px;margin-top:4px}
-        .side{padding:17px}.side h3{margin:1px 0 13px;font-size:15px}.metric{border-top:1px solid #edf0f3;padding:13px 0}.metric:first-of-type{border-top:0}.metric b{display:block;font-size:23px}.metric span{font-size:11px;color:#818c96}
-        .connection{border-top:1px solid #edf0f3;padding:12px 0;display:flex;justify-content:space-between;gap:8px;align-items:center}.connection b{font-size:13px}.connection span{display:block;font-size:10px;color:#84909a;margin-top:3px}.connect{border:1px solid #dce2e7;background:#fff;border-radius:9px;padding:7px 9px;font-size:10px;font-weight:800;cursor:pointer}
-        .focus{position:fixed;inset:0;background:#f5f7f9;z-index:5;display:grid;place-items:center}.focusBox{text-align:center;width:min(620px,calc(100% - 32px))}.focusBox h2{font-size:64px;letter-spacing:-4px;margin:0 0 12px}.focusBox p{color:#7b8791}.timer{font-size:82px;font-weight:800;letter-spacing:-5px;margin:30px 0}.notice{position:fixed;right:18px;bottom:18px;background:#15202b;color:#fff;padding:11px 14px;border-radius:11px;font-size:12px;box-shadow:0 12px 35px rgba(0,0,0,.18);z-index:10}
-        footer{text-align:center;color:#9aa4ad;font-size:10px;padding:25px 0 0}
-        @media(max-width:980px){.grid{grid-template-columns:150px minmax(0,1fr)}.side{grid-column:2}.search{width:130px}}@media(max-width:650px){.shell{width:calc(100% - 20px)}.hero{padding:30px 0 22px}h1{letter-spacing:-2.5px}.grid{grid-template-columns:1fr}.nav{display:flex;gap:4px;overflow:auto}.nav button{white-space:nowrap;width:auto}.nav .sep,.small{display:none}.side{grid-column:auto}.mainHead{align-items:flex-start;flex-direction:column}.tools{width:100%}.search{flex:1}.focusBox h2{font-size:46px}.timer{font-size:62px}}
-      `}</style>
-
-      <div className="shell">
-        <header className="top"><div className="brand">LIFE</div><div className="topRight"><button className="iconBtn" onClick={()=>setFocus(true)}>Focus</button><span className="pill">Private · Personal OS</span></div></header>
-
-        <section className="hero"><div className="eyebrow">GOOD MORNING</div><h1>Your life.<br/>Under control.</h1><div className="lead">One place for what needs your attention — commitments, inbox, calendar, projects and notes.</div></section>
-
-        <div className="grid">
-          <nav className="card nav">
-            <div className="small">Workspace</div>
-            {nav.map(n=><button key={n} className={section===n?"active":""} onClick={()=>setSection(n)}>{n}</button>)}
-            <div className="sep"/>
-            <button onClick={()=>notify("Automation center coming next")}>Automations</button>
-            <button onClick={()=>notify("Settings saved locally")}>Settings</button>
-          </nav>
-
-          <section className="card main">
-            <div className="mainHead"><div><h2>{section}</h2><div className="count">{section==="Calendar" ? events.length+" events" : visible.filter(t=>!done.includes(t.id)).length+" open"}</div></div><div className="tools"><input className="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search…" />{done.length>0&&<button className="secondary" onClick={removeDone}>Clear done</button>}</div></div>
-
-            {section==="Calendar" ? <div className="calendar">{events.map(e=><div className="event" key={e.time}><div className="time">{e.time}</div><div><b>{e.title}</b><span>{e.meta}</span></div></div>)}</div> :
-              visible.length===0 ? <div className="empty">Nothing here yet. Add your first item below.</div> :
-              <>{visible.map(t=>{const isDone=done.includes(t.id);return <div className="task" key={t.id}><button className={"check "+(isDone?"done":"")} onClick={()=>toggle(t.id)}>{isDone?"✓":""}</button><div><div className={"title "+(isDone?"strike":"")}>{t.title}{t.priority==="high"&&!isDone&&<span className="tag">Important</span>}</div><div className="detail">{t.detail}{t.due&&" · "+t.due}</div></div></div>})}
-              <div className="composer"><input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder={"Add to "+section.toLowerCase()+"…"} /><button className="primary" onClick={add}>Add</button></div></>}
-          </section>
-
-          <aside className="card side">
-            <h3>At a glance</h3>
-            <div className="metric"><b>{open.length}</b><span>open items</span></div>
-            <div className="metric"><b>{done.length}</b><span>completed</span></div>
-            <div className="metric"><b>{events.length}</b><span>today's events</span></div>
-            <h3 style={{marginTop:20}}>Connections</h3>
-            <div className="connection"><div><b>Gmail</b><span>Read-only integration</span></div><button className="connect" onClick={()=>notify("Gmail integration requires connection setup")}>Connect</button></div>
-            <div className="connection"><div><b>Calendar</b><span>Read-only integration</span></div><button className="connect" onClick={()=>notify("Calendar integration requires connection setup")}>Connect</button></div>
-            <div className="connection"><div><b>Documents</b><span>Local-first</span></div><button className="connect" onClick={()=>setSection("Notes")}>Open</button></div>
-          </aside>
-        </div>
-        <footer>LIFE · standalone · local-first · no EIE dependency</footer>
+        <aside className="card side">
+          <h3>Your day</h3>
+          <div className="metric"><b>{attention.length}</b><span>things need attention</span></div>
+          <div className="metric"><b>{done.length}</b><span>completed in this session</span></div>
+          <h3 style={{marginTop:20}}>Calendar</h3>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}
+          <button className="cta" onClick={()=>setFocus(true)}>Start focus session</button>
+          <button className="secondary" style={{width:"100%",marginTop:8}} onClick={()=>notify("Demo connections: Gmail · Calendar · Documents")}>Connections</button>
+        </aside>
       </div>
+      <div style={{textAlign:"center",fontSize:10,color:"#9aa3aa",paddingTop:24}}>LIFE · interactive product demo · sample data only · no real accounts connected</div>
+    </div>
 
-      {focus&&<div className="focus"><div className="focusBox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><p>Remove distractions and work on the next important item.</p><div className="timer">25:00</div><button className="primary" onClick={()=>setFocus(false)}>Exit focus</button></div></div>}
-      {notice&&<div className="notice">{notice}</div>}
-    </main>
-  );
+    {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}</div><button className="cta" onClick={()=>{toggle(selected.id);notify(done.includes(selected.id)?"Marked open":"Marked complete");setSelected(null)}}>{done.includes(selected.id)?"Mark as open":"Mark as complete"}</button></div>}
+
+    {focus&&<div className="focus"><div className="focusbox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><div className="muted">Use this screen to work on the next important item.</div><div className="timer">25:00</div><button className="cta" style={{width:"180px"}} onClick={()=>setFocus(false)}>Exit focus</button></div></div>}
+    {notice&&<div className="notice">{notice}</div>}
+  </main>;
 }
