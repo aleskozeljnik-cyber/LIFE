@@ -1,0 +1,30 @@
+{
+  "name": "energy-investment-engine",
+  "version": "2.22.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "vitest run --run tests/report-acceptance.test.ts tests/input-quality.test.ts",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "15.5.23",
+    "pdf-lib": "^1.17.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "overrides": {
+    "postcss": "8.5.23",
+    "sharp": "0.35.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.21",
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "typescript": "5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
