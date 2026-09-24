@@ -41,6 +41,20 @@ export default function LifePage() {
   const [running,setRunning] = useState(false);
   useEffect(()=>{
     if(!API_BASE) return;
+    const load=async()=>{try{
+      const d=new Date().toISOString().slice(0,10);
+      const r=await fetch(API_BASE+"/obligations?target_date="+d,{credentials:"include"});
+      if(!r.ok) return;
+      const data=await r.json();
+      if(Array.isArray(data)){
+        setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
+        setLive(true);
+      }
+    }catch{}};
+    load();
+  },[]);
+  useEffect(()=>{
+    if(!API_BASE) return;
     const load=async()=>{
       try{
         const d=new Date().toISOString().slice(0,10);
