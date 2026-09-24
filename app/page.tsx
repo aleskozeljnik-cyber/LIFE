@@ -83,6 +83,7 @@ export default function LifePage() {
   },[view,query,done]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
+  const connectGoogle=async()=>{if(!API_BASE){notify("LIFE API URL is not configured yet");return;}try{const r=await fetch(API_BASE+"/auth/google/start",{credentials:"include"});const d=await r.json();if(d.authorization_url) window.location.href=d.authorization_url;else notify("Google OAuth is not configured");}catch{notify("Cannot reach LIFE API")}};
   const connectGoogle=async()=>{
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
     try{
