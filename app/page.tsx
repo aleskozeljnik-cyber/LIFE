@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 type View = "Today" | "Needs attention" | "Inbox" | "Calendar" | "Projects" | "Documents";
 type Item = {
-  id: string; title: string; summary: string; source: string; sourceType: "Email"|"Calendar"|"Document"|"Project";
-  priority: "High"|"Medium"|"Low"; due: string; view: View;
+  id: string; title: string; summary: string; source: string; sourceType: "Email"|"Calendar"|"Document"|"Project"|"Google";
+  priority: "High"|"Medium"|"Low"; due: string; view: View; reason?: string; status?: string;
 };
 
 const demoItems: Item[] = [
@@ -26,7 +26,11 @@ const events = [
   ["17:30","Family time","Personal"]
 ];
 
+const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "";
+
 export default function LifePage() {
+  const [items,setItems] = useState<Item[]>(demoItems);
+  const [live,setLive] = useState(false);
   const [view,setView] = useState<View>("Today");
   const [selected,setSelected] = useState<Item|null>(null);
   const [done,setDone] = useState<string[]>([]);
@@ -35,6 +39,20 @@ export default function LifePage() {
   const [notice,setNotice] = useState("");
   const [seconds,setSeconds] = useState(25*60);
   const [running,setRunning] = useState(false);
+  useEffect(()=>{
+    if(!API_BASE) return;
+    const load=async()=>{try{
+      const d=new Date().toISOString().slice(0,10);
+      const r=await fetch(API_BASE+"/obligations?target_date="+d,{credentials:"include"});
+      if(!r.ok) return;
+      const data=await r.json();
+      if(Array.isArray(data)){
+        setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
+        setLive(true);
+      }
+    }catch{}};
+    load();
+  },[]);
   useEffect(()=>{
     if(!API_BASE) return;
     const load=async()=>{
@@ -65,6 +83,7 @@ export default function LifePage() {
   },[view,query,done]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
+  const connectGoogle=async()=>{if(!API_BASE){notify("LIFE API URL is not configured yet");return;}try{const r=await fetch(API_BASE+"/auth/google/start",{credentials:"include"});const d=await r.json();if(d.authorization_url) window.location.href=d.authorization_url;else notify("Google OAuth is not configured");}catch{notify("Cannot reach LIFE API")}};
   const connectGoogle=async()=>{
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
     try{
