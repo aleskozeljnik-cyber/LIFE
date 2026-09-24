@@ -26,7 +26,11 @@ const events = [
   ["17:30","Family time","Personal"]
 ];
 
+const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "";
+
 export default function LifePage() {
+  const [items,setItems] = useState<Item[]>(demoItems);
+  const [live,setLive] = useState(false);
   const [view,setView] = useState<View>("Today");
   const [selected,setSelected] = useState<Item|null>(null);
   const [done,setDone] = useState<string[]>([]);
