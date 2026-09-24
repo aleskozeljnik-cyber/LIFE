@@ -4,6 +4,7 @@ from .config import settings
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 
 GOOGLE_SCOPES = [
     "openid",
@@ -37,8 +38,25 @@ async def exchange_code(code: str) -> dict:
         response.raise_for_status()
         return response.json()
 
+async def refresh_access_token(refresh_token: str) -> dict:
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(GOOGLE_TOKEN_URL, data={
+            "refresh_token": refresh_token,
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "grant_type": "refresh_token",
+        })
+        response.raise_for_status()
+        return response.json()
+
 async def fetch_userinfo(access_token: str) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"})
         response.raise_for_status()
         return response.json()
+
+async def revoke_token(access_token: str) -> None:
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(GOOGLE_REVOKE_URL, params={"token": access_token})
+        if response.status_code not in {200, 400}:
+            response.raise_for_status()
