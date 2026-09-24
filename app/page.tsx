@@ -8,7 +8,7 @@ type Item = {
   priority: "High"|"Medium"|"Low"; due: string; view: View;
 };
 
-const items: Item[] = [
+const demoItems: Item[] = [
   {id:"a1",title:"Reply to SIJ — contract comment",summary:"Legal team sent 3 comments. They are waiting for your response before the next contract version.",source:"Gmail · Luka",sourceType:"Email",priority:"High",due:"Today · 16:00",view:"Needs attention"},
   {id:"a2",title:"15:00 meeting — prepare 3 decisions",summary:"Energy portfolio meeting. LIFE identified three open decisions from the previous meeting notes.",source:"Calendar · Energy",sourceType:"Calendar",priority:"High",due:"Today · 15:00",view:"Needs attention"},
   {id:"a3",title:"Invoice €518k still outstanding",summary:"Invoice was issued 9 days ago and is still marked unpaid in the demo finance documents.",source:"Documents · Finance",sourceType:"Document",priority:"High",due:"Today",view:"Needs attention"},
@@ -35,6 +35,22 @@ export default function LifePage() {
   const [notice,setNotice] = useState("");
   const [seconds,setSeconds] = useState(25*60);
   const [running,setRunning] = useState(false);
+  useEffect(()=>{
+    if(!API_BASE) return;
+    const load=async()=>{
+      try{
+        const d=new Date().toISOString().slice(0,10);
+        const r=await fetch(API_BASE+"/obligations?target_date="+d,{credentials:"include"});
+        if(!r.ok) return;
+        const data=await r.json();
+        if(Array.isArray(data)){
+          setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
+          setLive(true);
+        }
+      }catch{}
+    };
+    load();
+  },[]);
   useEffect(()=>{ if(!running) return; const t=setInterval(()=>setSeconds(s=>{if(s<=1){setRunning(false);return 0} return s-1}),1000); return ()=>clearInterval(t)},[running]);
   const timerLabel=`${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
 
@@ -49,6 +65,14 @@ export default function LifePage() {
   },[view,query,done]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
+  const connectGoogle=async()=>{
+    if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
+    try{
+      const r=await fetch(API_BASE+"/auth/google/start",{credentials:"include"});
+      const d=await r.json();
+      if(d.authorization_url) window.location.href=d.authorization_url; else notify("Google OAuth is not configured");
+    }catch{notify("Cannot reach LIFE API")}
+  };
   const toggle=(id:string)=>setDone(x=>x.includes(id)?x.filter(y=>y!==id):[...x,id]);
 
   return <main className="life">
@@ -70,14 +94,14 @@ export default function LifePage() {
     `}</style>
 
     <div className="shell">
-      <header className="top"><div className="brand">LIFE</div><div className="status">PRIVATE · DEMO MODE</div></header>
+      <header className="top"><div className="brand">LIFE</div><div className="status">{live?"PRIVATE · CONNECTED":"PRIVATE · DEMO MODE"}</div></header>
       <section className="hero"><div className="eyebrow">GOOD MORNING, ALEŠ</div><h1>Your life.<br/>Under control.</h1><p>LIFE brings together what matters from your inbox, calendar, documents and projects — then shows you what actually needs your attention.</p></section>
 
       <div className="layout">
         <nav className="card nav">
           <h4>Workspace</h4>
           {(["Today","Needs attention","Inbox","Calendar","Projects","Documents"] as View[]).map(v=><button key={v} className={(view===v||(v==="Needs attention"&&view==="Needs attention"))?"active":""} onClick={()=>setView(v)}>{v==="Needs attention"?<span className="attention">Needs attention <span className="badge">{attention.length}</span></span>:v}</button>)}
-          <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={()=>notify("Demo settings — integrations are read-only in this demo")}>Settings</button>
+          <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={connectGoogle}>{live?"Google connected":"Connect Google"}</button><button onClick={()=>notify(live?"Live Google data connected":"Connect Google to load Gmail & Calendar")}>Settings</button>
         </nav>
 
         <section className="card main">
@@ -94,13 +118,13 @@ export default function LifePage() {
           <div className="metric"><b>{done.length}</b><span>completed in this session</span></div>
           <h3 style={{marginTop:20}}>Calendar</h3>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}
           <button className="cta" onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Start focus session</button>
-          <button className="secondary" style={{width:"100%",marginTop:8}} onClick={()=>notify("Demo connections: Gmail · Calendar · Documents")}>Connections</button>
+          <button className="secondary" style={{width:"100%",marginTop:8}} onClick={connectGoogle}>{live?"Google connected":"Connect Google"}</button>
         </aside>
       </div>
-      <div style={{textAlign:"center",fontSize:10,color:"#9aa3aa",paddingTop:24}}>LIFE · interactive product demo · sample data only · no real accounts connected</div>
+      <div style={{textAlign:"center",fontSize:10,color:"#9aa3aa",paddingTop:24}}>LIFE · {live ? "live Google data" : "interactive product demo · sample data only"}</div>
     </div>
 
-    {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}</div><button className="cta" onClick={()=>{toggle(selected.id);notify(done.includes(selected.id)?"Marked open":"Marked complete");setSelected(null)}}>{done.includes(selected.id)?"Mark as open":"Mark as complete"}</button></div>}
+    {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}<br/><br/><b>Why LIFE flagged this</b><br/>{selected.reason || "Demo classification reason."}</div><button className="cta" onClick={()=>{toggle(selected.id);notify(done.includes(selected.id)?"Marked open":"Marked complete");setSelected(null)}}>{done.includes(selected.id)?"Mark as open":"Mark as complete"}</button></div>}
 
     {focus&&<div className="focus"><div className="focusbox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><div className="muted">Use this screen to work on the next important item.</div><div className="timer">{timerLabel}</div><div style={{display:"flex",gap:8,justifyContent:"center"}}><button className="secondary" onClick={()=>setRunning(x=>!x)}>{running?"Pause":"Start"}</button><button className="secondary" onClick={()=>{setRunning(false);setSeconds(25*60)}}>Reset</button><button className="secondary" onClick={()=>setFocus(false)}>Exit</button></div></div></div>}
     {notice&&<div className="notice">{notice}</div>}
