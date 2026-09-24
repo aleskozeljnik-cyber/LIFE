@@ -1,5 +1,6 @@
 from datetime import date
 from fastapi import Cookie, FastAPI, HTTPException, Response
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -97,7 +98,6 @@ def logout(response: Response):
 @app.post("/auth/revoke")
 async def revoke(response: Response, life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
-    target = target_date or date_param or date.today()
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("select access_token_encrypted from oauth_tokens where user_id=%s and provider='google'", (user_id,))
@@ -145,6 +145,13 @@ async def delete_user(response: Response, life_session: str | None = Cookie(defa
     user_id = current_user(life_session)
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
+            await cur.execute("select access_token_encrypted from oauth_tokens where user_id=%s and provider='google'", (user_id,))
+            token = await cur.fetchone()
+            if token:
+                try:
+                    await revoke_token(decrypt_token(token["access_token_encrypted"]))
+                except Exception:
+                    pass
             await cur.execute("delete from users where id=%s", (user_id,))
         await conn.commit()
     response.delete_cookie("life_session")
@@ -172,6 +179,7 @@ async def sync_source(source_id: str, life_session: str | None = Cookie(default=
 @app.get("/obligations")
 async def obligations(target_date: date | None = None, date_param: date | None = None, life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
+    target = target_date or date_param or date.today()
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
