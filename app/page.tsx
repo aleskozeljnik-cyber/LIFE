@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type View = "Today" | "Needs attention" | "Inbox" | "Calendar" | "Projects" | "Documents";
 type Item = {
@@ -33,6 +33,10 @@ export default function LifePage() {
   const [query,setQuery] = useState("");
   const [focus,setFocus] = useState(false);
   const [notice,setNotice] = useState("");
+  const [seconds,setSeconds] = useState(25*60);
+  const [running,setRunning] = useState(false);
+  useEffect(()=>{ if(!running) return; const t=setInterval(()=>setSeconds(s=>{if(s<=1){setRunning(false);return 0} return s-1}),1000); return ()=>clearInterval(t)},[running]);
+  const timerLabel=`${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
 
   const attention = items.filter(x=>x.view==="Needs attention" && !done.includes(x.id));
   const visible = useMemo(()=>{
@@ -73,7 +77,7 @@ export default function LifePage() {
         <nav className="card nav">
           <h4>Workspace</h4>
           {(["Today","Needs attention","Inbox","Calendar","Projects","Documents"] as View[]).map(v=><button key={v} className={(view===v||(v==="Needs attention"&&view==="Needs attention"))?"active":""} onClick={()=>setView(v)}>{v==="Needs attention"?<span className="attention">Needs attention <span className="badge">{attention.length}</span></span>:v}</button>)}
-          <h4>Tools</h4><button onClick={()=>setFocus(true)}>Focus mode</button><button onClick={()=>notify("Demo settings — integrations are read-only in this demo")}>Settings</button>
+          <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={()=>notify("Demo settings — integrations are read-only in this demo")}>Settings</button>
         </nav>
 
         <section className="card main">
@@ -89,7 +93,7 @@ export default function LifePage() {
           <div className="metric"><b>{attention.length}</b><span>things need attention</span></div>
           <div className="metric"><b>{done.length}</b><span>completed in this session</span></div>
           <h3 style={{marginTop:20}}>Calendar</h3>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}
-          <button className="cta" onClick={()=>setFocus(true)}>Start focus session</button>
+          <button className="cta" onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Start focus session</button>
           <button className="secondary" style={{width:"100%",marginTop:8}} onClick={()=>notify("Demo connections: Gmail · Calendar · Documents")}>Connections</button>
         </aside>
       </div>
@@ -98,7 +102,7 @@ export default function LifePage() {
 
     {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}</div><button className="cta" onClick={()=>{toggle(selected.id);notify(done.includes(selected.id)?"Marked open":"Marked complete");setSelected(null)}}>{done.includes(selected.id)?"Mark as open":"Mark as complete"}</button></div>}
 
-    {focus&&<div className="focus"><div className="focusbox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><div className="muted">Use this screen to work on the next important item.</div><div className="timer">25:00</div><button className="cta" style={{width:"180px"}} onClick={()=>setFocus(false)}>Exit focus</button></div></div>}
+    {focus&&<div className="focus"><div className="focusbox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><div className="muted">Use this screen to work on the next important item.</div><div className="timer">{timerLabel}</div><div style={{display:"flex",gap:8,justifyContent:"center"}}><button className="secondary" onClick={()=>setRunning(x=>!x)}>{running?"Pause":"Start"}</button><button className="secondary" onClick={()=>{setRunning(false);setSeconds(25*60)}}>Reset</button><button className="secondary" onClick={()=>setFocus(false)}>Exit</button></div></div></div>}
     {notice&&<div className="notice">{notice}</div>}
   </main>;
 }
