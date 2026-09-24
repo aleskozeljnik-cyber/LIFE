@@ -1,3 +1,4 @@
+from psycopg.types.json import Jsonb
 from .db import get_connection
 from .google import refresh_access_token
 from .pipeline import sync_gmail_and_extract, sync_calendar_and_extract
@@ -19,11 +20,13 @@ async def get_google_access_token(user_id: str) -> str:
                     await conn.commit()
             return access_token
 
-async def run_user_sync(user_id: str) -> dict:
+async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
     access_token = await get_google_access_token(user_id)
-    result = {"gmail": await sync_gmail_and_extract(user_id, access_token), "calendar": await sync_calendar_and_extract(user_id, access_token)}
+    result = {}
+    if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
+    if provider in (None, "calendar"): result["calendar"] = await sync_calendar_and_extract(user_id, access_token)
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",result))
+            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider":provider,"result":result})))
         await conn.commit()
     return result
