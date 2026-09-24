@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 type View = "Today" | "Needs attention" | "Inbox" | "Calendar" | "Projects" | "Documents";
 type Item = {
-  id: string; title: string; summary: string; source: string; sourceType: "Email"|"Calendar"|"Document"|"Project";
-  priority: "High"|"Medium"|"Low"; due: string; view: View;
+  id: string; title: string; summary: string; source: string; sourceType: "Email"|"Calendar"|"Document"|"Project"|"Google";
+  priority: "High"|"Medium"|"Low"; due: string; view: View; reason?: string; status?: string;
 };
 
 const demoItems: Item[] = [
