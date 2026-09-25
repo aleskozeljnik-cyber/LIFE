@@ -34,6 +34,9 @@ export default function LifePage() {
   const [summary,setSummary] = useState("");
   const [view,setView] = useState<View>("Today");
   const [selected,setSelected] = useState<Item|null>(null);
+  const [settingsOpen,setSettingsOpen] = useState(false);
+  const [editTitle,setEditTitle] = useState("");
+  const [editCategory,setEditCategory] = useState("");
   const [done,setDone] = useState<string[]>([]);
   const [query,setQuery] = useState("");
   const [focus,setFocus] = useState(false);
@@ -83,6 +86,18 @@ export default function LifePage() {
   },[view,query,done]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
+  const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
+  const persist=async(id:string,patch:Record<string,string>)=>{
+    if(!API_BASE){notify("Live API is not configured");return false}
+    try{const r=await api("/obligations/"+id,{method:"PATCH",body:JSON.stringify(patch)});if(!r.ok) throw new Error(); return true}catch{notify("Connect Google first to save changes");return false}
+  };
+  const confirmItem=async(id:string)=>{if(await persist(id,{status:"done"})){setDone(x=>x.includes(id)?x:[...x,id]);notify("Confirmed");setSelected(null)}};
+  const dismissItem=async(id:string)=>{if(await persist(id,{status:"dismissed"})){setDone(x=>x.includes(id)?x:[...x,id]);notify("Dismissed");setSelected(null)}};
+  const correctItem=async(id:string)=>{const patch:Record<string,string>={};if(editCategory)patch.category=editCategory;if(editTitle.trim())patch.title=editTitle.trim();if(!Object.keys(patch).length){notify("Choose a correction first");return}if(await persist(id,patch)){setItems(xs=>xs.map(x=>x.id===id?{...x,...(editTitle.trim()?{title:editTitle.trim()}:{}),...(editCategory?{source:x.source+""}: {})}:x));notify("Correction saved");setSelected(null)}};
+  const openSettings=()=>setSettingsOpen(true);
+  const exportData=async()=>{try{const r=await api("/users/me/export");if(!r.ok)throw new Error();const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download="life-export.json";a.click();URL.revokeObjectURL(u);notify("Export downloaded")}catch{notify("Connect Google first")}};
+  const revokeAccess=async()=>{if(!window.confirm("Revoke Google access and sign out?"))return;try{const r=await api("/auth/revoke",{method:"POST"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);notify("Google access revoked")}catch{notify("Could not revoke access")}};
+  const deleteAccount=async()=>{if(!window.confirm("Delete your LIFE account and all stored data? This cannot be undone."))return;try{const r=await api("/users/me",{method:"DELETE"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Account deleted")}catch{notify("Could not delete account")}};
   const connectGoogle=async()=>{
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
     try{
@@ -119,7 +134,7 @@ export default function LifePage() {
         <nav className="card nav">
           <h4>Workspace</h4>
           {(["Today","Needs attention","Inbox","Calendar","Projects","Documents"] as View[]).map(v=><button key={v} className={(view===v||(v==="Needs attention"&&view==="Needs attention"))?"active":""} onClick={()=>setView(v)}>{v==="Needs attention"?<span className="attention">Needs attention <span className="badge">{attention.length}</span></span>:v}</button>)}
-          <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={connectGoogle}>{live?"Google connected":"Connect Google"}</button><button onClick={()=>notify(live?"Live Google data connected":"Connect Google to load Gmail & Calendar")}>Settings</button>
+          <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={connectGoogle}>{live?"Google connected":"Connect Google"}</button><button onClick={openSettings}>Settings</button>
         </nav>
 
         <section className="card main">
@@ -127,7 +142,7 @@ export default function LifePage() {
           {view==="Today" && <div className="brief"><b>{live?"Today briefing":"AI briefing · demo"}</b><p>{live && summary ? summary : "I found "+attention.length+" things that need your attention. Two are time-sensitive and one is a financial follow-up. Start with the SIJ contract response."}</p></div>}
           {view==="Calendar" ? <div>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}</div> :
            visible.length===0 ? <div className="muted" style={{padding:"25px 3px"}}>Nothing here in the demo.</div> :
-           visible.map(x=>{const isDone=done.includes(x.id);return <div className="item" key={x.id} onClick={()=>setSelected(x)}><button className={"check "+(isDone?"done":"")} onClick={e=>{e.stopPropagation();toggle(x.id)}}>{isDone?"✓":""}</button><div className="itemmain"><div className="itemtop"><div className={"title "+(isDone?"strike":"")}>{x.title}</div><div className="due">{x.due}</div></div><div className="summary">{x.summary}</div><div className="source">{x.source}</div></div></div>})}
+           visible.map(x=>{const isDone=done.includes(x.id);return <div className="item" key={x.id} onClick={()=>{setEditTitle(x.title);setEditCategory("");setSelected(x)}}><button className={"check "+(isDone?"done":"")} onClick={e=>{e.stopPropagation();toggle(x.id)}}>{isDone?"✓":""}</button><div className="itemmain"><div className="itemtop"><div className={"title "+(isDone?"strike":"")}>{x.title}</div><div className="due">{x.due}</div></div><div className="summary">{x.summary}</div><div className="source">{x.source}</div></div></div>})}
         </section>
 
         <aside className="card side">
@@ -142,7 +157,9 @@ export default function LifePage() {
       <div style={{textAlign:"center",fontSize:10,color:"#9aa3aa",paddingTop:24}}>LIFE · {live ? "live Google data" : "interactive product demo · sample data only"}</div>
     </div>
 
-    {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}<br/><br/><b>Why LIFE flagged this</b><br/>{selected.reason || "Demo classification reason."}</div><button className="cta" onClick={()=>{toggle(selected.id);notify(done.includes(selected.id)?"Marked open":"Marked complete");setSelected(null)}}>{done.includes(selected.id)?"Mark as open":"Mark as complete"}</button></div>}
+    {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}<br/><br/><b>Why LIFE flagged this</b><br/>{selected.reason || "Demo classification reason."}</div><div style={{display:"grid",gap:8,marginTop:14}}><button className="cta" onClick={()=>confirmItem(selected.id)}>Confirm</button><button className="secondary" onClick={()=>dismissItem(selected.id)}>Dismiss</button><div style={{borderTop:"1px solid #edf0f2",paddingTop:12,marginTop:4}}><div className="muted" style={{marginBottom:7}}>Correct classification</div><input className="search" style={{width:"100%"}} value={editTitle} onChange={e=>setEditTitle(e.target.value)} placeholder="Correct title (optional)" /><select className="search" style={{width:"100%",marginTop:7}} value={editCategory} onChange={e=>setEditCategory(e.target.value)}><option value="">Keep category</option><option value="finance">Finance</option><option value="legal">Legal</option><option value="meeting">Meeting</option><option value="task">Task</option><option value="personal">Personal</option></select><button className="secondary" style={{marginTop:7,width:"100%"}} onClick={()=>correctItem(selected.id)}>Save correction</button></div></div></div>}
+
+    {settingsOpen&&<div className="drawer"><button className="close" onClick={()=>setSettingsOpen(false)}>×</button><div className="label">Account</div><h2>Settings</h2><p>Control your Google connection and your LIFE data.</p><button className="secondary" style={{width:"100%"}} onClick={exportData}>Export my data</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={revokeAccess}>Revoke Google access</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={deleteAccount}>Delete LIFE account</button></div>}
 
     {focus&&<div className="focus"><div className="focusbox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><div className="muted">Use this screen to work on the next important item.</div><div className="timer">{timerLabel}</div><div style={{display:"flex",gap:8,justifyContent:"center"}}><button className="secondary" onClick={()=>setRunning(x=>!x)}>{running?"Pause":"Start"}</button><button className="secondary" onClick={()=>{setRunning(false);setSeconds(25*60)}}>Reset</button><button className="secondary" onClick={()=>setFocus(false)}>Exit</button></div></div></div>}
     {notice&&<div className="notice">{notice}</div>}
