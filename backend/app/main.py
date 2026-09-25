@@ -10,6 +10,7 @@ from .config import settings
 from .db import get_connection
 from .google import authorization_url, exchange_code, fetch_userinfo, revoke_token
 from .jobs import run_user_sync
+from .summary import generate_today_summary
 from .security import encrypt_token, decrypt_token
 
 app = FastAPI(title="LIFE API", version="1.0.0")
@@ -216,11 +217,8 @@ async def dismiss_obligation(obligation_id: str, life_session: str | None = Cook
 @app.get("/summaries/today")
 async def today_summary(life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
-    async with await get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("select content,summary_date from daily_summaries where user_id=%s and summary_date=current_date", (user_id,))
-            row = await cur.fetchone()
-    return row or {"content": "No summary generated yet.", "summary_date": date.today()}
+    content = await generate_today_summary(user_id)
+    return {"content": content, "summary_date": date.today()}
 
 @app.post("/sources/gmail/sync")
 async def gmail_sync(life_session: str | None = Cookie(default=None)):
