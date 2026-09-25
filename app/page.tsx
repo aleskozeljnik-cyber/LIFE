@@ -27,6 +27,9 @@ const events = [
 ];
 
 const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "https://life-production-fd51.up.railway.app";
+const CONNECT_PROVIDERS = [
+  { id: "google", label: "Google", actionLabel: "Connect Google account", description: "LIFE reads Gmail and Google Calendar only. You can revoke access at any time." }
+] as const;
 
 export default function LifePage() {
   const [items,setItems] = useState<Item[]>(demoItems);
@@ -74,6 +77,10 @@ export default function LifePage() {
         const auth=await statusResponse.json();
         const connected=new URLSearchParams(window.location.search).get("connected")==="1";
         if(connected){
+          const started=Number(sessionStorage.getItem("life_connect_started_at")||0);
+          const elapsed=started?Math.max(0,Math.round((Date.now()-started)/1000)):0;
+          sessionStorage.removeItem("life_connect_started_at");
+          setNotice(elapsed?("Google connected in "+elapsed+"s"):"Google connected");
           await Promise.allSettled([
             fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
             fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
@@ -132,14 +139,18 @@ export default function LifePage() {
   const revokeAccess=async()=>{if(!window.confirm("Revoke Google access and sign out?"))return;try{const r=await api("/auth/revoke",{method:"POST"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Google access revoked")}catch{notify("Could not revoke access")}};
   const logout=async()=>{try{await api("/auth/logout",{method:"POST"});}finally{setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Signed out")}};
   const deleteAccount=async()=>{if(!window.confirm("Delete your LIFE account and all stored data? This cannot be undone."))return;try{const r=await api("/users/me",{method:"DELETE"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Account deleted")}catch{notify("Could not delete account")}};
-  const connectGoogle=async()=>{
+  const connectProvider=async(providerId:string)=>{
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
     try{
-      const r=await fetch(API_BASE+"/auth/google/start",{credentials:"include"});
+      const r=await fetch(API_BASE+"/auth/"+providerId+"/start",{credentials:"include"});
       const d=await r.json();
-      if(d.authorization_url) window.location.href=d.authorization_url; else notify("Google OAuth is not configured");
+      if(d.authorization_url){
+        sessionStorage.setItem("life_connect_started_at", String(Date.now()));
+        window.location.href=d.authorization_url;
+      } else notify(providerId==="google"?"Google OAuth is not configured":"Provider is not configured");
     }catch{notify("Cannot reach LIFE API")}
   };
+  const connectGoogle=()=>connectProvider("google");
   const toggle=(id:string)=>setDone(x=>x.includes(id)?x.filter(y=>y!==id):[...x,id]);
 
   return <main className="life">
@@ -163,7 +174,7 @@ export default function LifePage() {
     <div className="shell">
       <header className="top"><div className="brand">LIFE</div><div className="status">{live?("PRIVATE · LIVE"+(userEmail?" · "+userEmail:"")):"PRIVATE · DEMO MODE"}</div></header>
       <section className="hero"><div className="eyebrow">GOOD MORNING, ALEŠ</div><h1>Your life.<br/>Under control.</h1><p>LIFE brings together what matters from your inbox, calendar, documents and projects — then shows you what actually needs your attention.</p></section>
-      {authChecked && !live && <section className="card onboarding"><div><h3>Connect your Google account</h3><p>Give LIFE read-only access to Gmail and Calendar. Your live obligations will replace the sample data after connection.</p></div><div className="actions"><button className="cta" style={{marginTop:0,whiteSpace:"nowrap"}} onClick={connectGoogle}>Connect Google</button></div></section>}
+      {authChecked && !live && <section className="card onboarding"><div><h3>Connect your sources</h3><p>Your data stays private. LIFE reads only the connected provider data shown below, and you can revoke access at any time.</p><div style={{display:"grid",gap:10,marginTop:14}}>{CONNECT_PROVIDERS.map(provider=><div key={provider.id} className="sourcebox" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}><div><b>{provider.label}</b><div className="muted" style={{marginTop:4}}>{provider.description}</div></div><button className="cta" style={{marginTop:0,whiteSpace:"nowrap"}} onClick={()=>connectProvider(provider.id)}>{provider.actionLabel}</button></div>)}</div></div></section>}
 
       <div className="layout">
         <nav className="card nav">
