@@ -77,10 +77,6 @@ export default function LifePage() {
         const auth=await statusResponse.json();
         const connected=new URLSearchParams(window.location.search).get("connected")==="1";
         if(connected){
-          const started=Number(sessionStorage.getItem("life_connect_started_at")||0);
-          const elapsed=started?Math.max(0,Math.round((Date.now()-started)/1000)):0;
-          sessionStorage.removeItem("life_connect_started_at");
-          setNotice(elapsed?("Google connected in "+elapsed+"s"):"Google connected");
           await Promise.allSettled([
             fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
             fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
@@ -91,6 +87,12 @@ export default function LifePage() {
           setLive(true);
           if(auth?.user?.email) setUserEmail(auth.user.email);
           await refreshLive();
+          if(connected){
+            const started=Number(sessionStorage.getItem("life_connect_started_at")||0);
+            const elapsed=started?Math.max(0,Math.round((Date.now()-started)/1000)):0;
+            sessionStorage.removeItem("life_connect_started_at");
+            setNotice(elapsed?("First live Today loaded in "+elapsed+"s"):"Google connected");
+          }
         }
       }catch{}
       finally{setAuthChecked(true);}
