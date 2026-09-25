@@ -1,5 +1,5 @@
 from datetime import date
-from fastapi import Cookie, FastAPI, HTTPException, Response
+from fastapi import Cookie, FastAPI, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -86,7 +86,7 @@ async def google_callback(code: str, state: str, life_oauth_state: str | None = 
         await conn.commit()
     target = settings.frontend_url.rstrip("/") + "/?connected=1"
     redirect = RedirectResponse(target, status_code=303)
-    redirect.set_cookie("life_session", sign_session(str(user_id)), httponly=True, secure=True, samesite="lax", max_age=60*60*24*30)
+    redirect.set_cookie("life_session", sign_session(str(user_id)), httponly=True, secure=True, samesite="none", max_age=60*60*24*30)
     redirect.delete_cookie("life_oauth_state")
     return redirect
 
@@ -177,7 +177,7 @@ async def sync_source(source_id: str, life_session: str | None = Cookie(default=
     return {"source_id": source_id, "result": await run_user_sync(user_id, source["provider"])}
 
 @app.get("/obligations")
-async def obligations(target_date: date | None = None, date_param: date | None = None, life_session: str | None = Cookie(default=None)):
+async def obligations(target_date: date | None = None, date_param: date | None = Query(default=None, alias="date"), life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
     target = target_date or date_param or date.today()
     async with await get_connection() as conn:
