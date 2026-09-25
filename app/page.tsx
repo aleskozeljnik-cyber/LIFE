@@ -33,6 +33,7 @@ export default function LifePage() {
   const [live,setLive] = useState(false);
   const [authChecked,setAuthChecked] = useState(false);
   const [userEmail,setUserEmail] = useState("");
+  const [syncing,setSyncing] = useState(false);
   const [summary,setSummary] = useState("");
   const [view,setView] = useState<View>("Today");
   const [selected,setSelected] = useState<Item|null>(null);
@@ -117,6 +118,7 @@ export default function LifePage() {
   },[items,view,query,done,showAll]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
+  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);try{await Promise.allSettled([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);await refreshLive();notify("Synced just now")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
   const persist=async(id:string,patch:Record<string,string>)=>{
     if(!API_BASE){notify("Live API is not configured");return false}
@@ -171,7 +173,7 @@ export default function LifePage() {
         </nav>
 
         <section className="card main">
-          <div className="head"><div><h2>{view}</h2><div className="muted">{view==="Today"?"Your day at a glance":"Demo data · click any item to explore it"}</div></div><input className="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search LIFE…" /></div>
+          <div className="head"><div><h2>{view}</h2><div className="muted">{view==="Today"?(live?"Live data · auto-sync every 15 min":"Your day at a glance"):"Demo data · click any item to explore it"}</div></div><div style={{display:"flex",gap:8,width:"min-content",alignItems:"center"}}>{live&&<button className="secondary" onClick={syncNow} disabled={syncing}>{syncing?"Syncing…":"Sync now"}</button>}<input className="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search LIFE…" /></div></div>
           {view==="Today" && <div className="brief"><b>{live?"Today briefing":"AI briefing · demo"}</b><p>{live && summary ? summary : "I found "+attention.length+" things that need your attention. Two are time-sensitive and one is a financial follow-up. Start with the SIJ contract response."}</p></div>}
           {view==="Calendar" ? <div>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}</div> :
            visible.length===0 ? <div className="muted" style={{padding:"25px 3px"}}>Nothing here in the demo.</div> :
