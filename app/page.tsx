@@ -75,15 +75,16 @@ export default function LifePage() {
   useEffect(()=>{ if(!running) return; const t=setInterval(()=>setSeconds(s=>{if(s<=1){setRunning(false);return 0} return s-1}),1000); return ()=>clearInterval(t)},[running]);
   const timerLabel=`${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
 
-  const attention = items.filter(x=>x.view==="Needs attention" && !done.includes(x.id));
+  const effectiveDone = [...done,...items.filter(x=>x.status==="done"||x.status==="dismissed").map(x=>x.id)];
+  const attention = items.filter(x=>x.view==="Needs attention" && !effectiveDone.includes(x.id));
   const visible = useMemo(()=>{
     let list: Item[];
-    if(view==="Today") list = items.filter(x=>["Needs attention","Calendar"].includes(x.view));
+    if(view==="Today") list = items.filter(x=>["Needs attention","Calendar"].includes(x.view) && !effectiveDone.includes(x.id));
     else if(view==="Needs attention") list = attention;
-    else list = items.filter(x=>x.view===view);
+    else list = items.filter(x=>x.view===view && !effectiveDone.includes(x.id));
     const q=query.toLowerCase().trim();
     return q ? list.filter(x=>(x.title+" "+x.summary+" "+x.source).toLowerCase().includes(q)) : list;
-  },[view,query,done]);
+  },[view,query,effectiveDone.join(",")]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
@@ -93,10 +94,11 @@ export default function LifePage() {
   };
   const confirmItem=async(id:string)=>{if(await persist(id,{status:"done"})){setDone(x=>x.includes(id)?x:[...x,id]);notify("Confirmed");setSelected(null)}};
   const dismissItem=async(id:string)=>{if(await persist(id,{status:"dismissed"})){setDone(x=>x.includes(id)?x:[...x,id]);notify("Dismissed");setSelected(null)}};
-  const correctItem=async(id:string)=>{const patch:Record<string,string>={};if(editCategory)patch.category=editCategory;if(editTitle.trim())patch.title=editTitle.trim();if(!Object.keys(patch).length){notify("Choose a correction first");return}if(await persist(id,patch)){setItems(xs=>xs.map(x=>x.id===id?{...x,...(editTitle.trim()?{title:editTitle.trim()}:{}),...(editCategory?{source:x.source+""}: {})}:x));notify("Correction saved");setSelected(null)}};
+  const correctItem=async(id:string)=>{const patch:Record<string,string>={};if(editCategory)patch.category=editCategory;if(editTitle.trim())patch.title=editTitle.trim();if(!Object.keys(patch).length){notify("Choose a correction first");return}if(await persist(id,patch)){setItems(xs=>xs.map(x=>x.id===id?{...x,...(editTitle.trim()?{title:editTitle.trim()}:{}),...(editCategory?{reason:"User corrected classification to "+editCategory}: {})}:x));notify("Correction saved");setSelected(null)}};
   const openSettings=()=>setSettingsOpen(true);
   const exportData=async()=>{try{const r=await api("/users/me/export");if(!r.ok)throw new Error();const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download="life-export.json";a.click();URL.revokeObjectURL(u);notify("Export downloaded")}catch{notify("Connect Google first")}};
-  const revokeAccess=async()=>{if(!window.confirm("Revoke Google access and sign out?"))return;try{const r=await api("/auth/revoke",{method:"POST"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);notify("Google access revoked")}catch{notify("Could not revoke access")}};
+  const revokeAccess=async()=>{if(!window.confirm("Revoke Google access and sign out?"))return;try{const r=await api("/auth/revoke",{method:"POST"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Google access revoked")}catch{notify("Could not revoke access")}};
+  const logout=async()=>{try{await api("/auth/logout",{method:"POST"});}finally{setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Signed out")}};
   const deleteAccount=async()=>{if(!window.confirm("Delete your LIFE account and all stored data? This cannot be undone."))return;try{const r=await api("/users/me",{method:"DELETE"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Account deleted")}catch{notify("Could not delete account")}};
   const connectGoogle=async()=>{
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
@@ -159,7 +161,7 @@ export default function LifePage() {
 
     {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}<br/><br/><b>Why LIFE flagged this</b><br/>{selected.reason || "Demo classification reason."}</div><div style={{display:"grid",gap:8,marginTop:14}}><button className="cta" onClick={()=>confirmItem(selected.id)}>Confirm</button><button className="secondary" onClick={()=>dismissItem(selected.id)}>Dismiss</button><div style={{borderTop:"1px solid #edf0f2",paddingTop:12,marginTop:4}}><div className="muted" style={{marginBottom:7}}>Correct classification</div><input className="search" style={{width:"100%"}} value={editTitle} onChange={e=>setEditTitle(e.target.value)} placeholder="Correct title (optional)" /><select className="search" style={{width:"100%",marginTop:7}} value={editCategory} onChange={e=>setEditCategory(e.target.value)}><option value="">Keep category</option><option value="finance">Finance</option><option value="legal">Legal</option><option value="meeting">Meeting</option><option value="task">Task</option><option value="personal">Personal</option></select><button className="secondary" style={{marginTop:7,width:"100%"}} onClick={()=>correctItem(selected.id)}>Save correction</button></div></div></div>}
 
-    {settingsOpen&&<div className="drawer"><button className="close" onClick={()=>setSettingsOpen(false)}>×</button><div className="label">Account</div><h2>Settings</h2><p>Control your Google connection and your LIFE data.</p><button className="secondary" style={{width:"100%"}} onClick={exportData}>Export my data</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={revokeAccess}>Revoke Google access</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={deleteAccount}>Delete LIFE account</button></div>}
+    {settingsOpen&&<div className="drawer"><button className="close" onClick={()=>setSettingsOpen(false)}>×</button><div className="label">Account</div><h2>Settings</h2><p>Control your Google connection and your LIFE data.</p><div className="sourcebox" style={{marginBottom:12}}><b>Google</b><br/>{live?"Connected":"Not connected"}</div><button className="secondary" style={{width:"100%"}} onClick={exportData}>Export my data</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={logout}>Sign out</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={revokeAccess}>Revoke Google access</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={deleteAccount}>Delete LIFE account</button></div>}
 
     {focus&&<div className="focus"><div className="focusbox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><div className="muted">Use this screen to work on the next important item.</div><div className="timer">{timerLabel}</div><div style={{display:"flex",gap:8,justifyContent:"center"}}><button className="secondary" onClick={()=>setRunning(x=>!x)}>{running?"Pause":"Start"}</button><button className="secondary" onClick={()=>{setRunning(false);setSeconds(25*60)}}>Reset</button><button className="secondary" onClick={()=>setFocus(false)}>Exit</button></div></div></div>}
     {notice&&<div className="notice">{notice}</div>}
