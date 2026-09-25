@@ -25,7 +25,7 @@ def gmail_text(message: dict) -> str:
     return "\n".join(x for x in [f"From: {headers.get('from','')}", f"To: {headers.get('to','')}", f"Subject: {headers.get('subject','')}", body] if x).strip()
 
 async def _hint(cur, user_id: str) -> str:
-    await cur.execute("select field_name,new_value,count(*) as n from corrections where user_id=%s group by field_name,new_value order by n desc limit 12", (user_id,))
+    await cur.execute("select field_name,new_value,count(*) as n from corrections where user_id=%s and field_name in ('category','title') group by field_name,new_value order by n desc limit 12", (user_id,))
     rows = await cur.fetchall()
     return "; ".join(f"{r['field_name']}={r['new_value']}" for r in rows)
 
