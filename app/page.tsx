@@ -84,7 +84,7 @@ export default function LifePage() {
     else list = items.filter(x=>x.view===view && !effectiveDone.includes(x.id));
     const q=query.toLowerCase().trim();
     return q ? list.filter(x=>(x.title+" "+x.summary+" "+x.source).toLowerCase().includes(q)) : list;
-  },[view,query,effectiveDone.join(",")]);
+  },[items,view,query,done]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
