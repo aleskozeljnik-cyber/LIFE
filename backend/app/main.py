@@ -88,12 +88,30 @@ async def google_callback(code: str, state: str, life_oauth_state: str | None = 
     target = settings.frontend_url.rstrip("/") + "/?connected=1"
     redirect = RedirectResponse(target, status_code=303)
     redirect.set_cookie("life_session", sign_session(str(user_id)), httponly=True, secure=True, samesite="none", max_age=60*60*24*30)
-    redirect.delete_cookie("life_oauth_state")
+    redirect.delete_cookie("life_oauth_state", httponly=True, secure=True, samesite="none")
     return redirect
+
+@app.get("/auth/status")
+async def auth_status(life_session: str | None = Cookie(default=None)):
+    if not life_session:
+        return {"authenticated": False, "google_connected": False}
+    try:
+        user_id = current_user(life_session)
+        async with await get_connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("select id,email,name from users where id=%s", (user_id,))
+                user = await cur.fetchone()
+                await cur.execute("select 1 from oauth_tokens where user_id=%s and provider='google' limit 1", (user_id,))
+                connected = await cur.fetchone() is not None
+        if not user:
+            return {"authenticated": False, "google_connected": False}
+        return {"authenticated": True, "google_connected": connected, "user": user}
+    except HTTPException:
+        return {"authenticated": False, "google_connected": False}
 
 @app.post("/auth/logout")
 def logout(response: Response):
-    response.delete_cookie("life_session")
+    response.delete_cookie("life_session", httponly=True, secure=True, samesite="none")
     return {"status": "logged_out"}
 
 @app.post("/auth/revoke")
