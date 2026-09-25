@@ -43,8 +43,8 @@ async def health():
                 await cur.execute("select 1 as db")
                 row = await cur.fetchone()
         return {"status": "ok", "service": "life-api", "database": bool(row and row["db"] == 1)}
-    except Exception as exc:
-        return {"status": "degraded", "service": "life-api", "database": False, "error": str(exc)[:200]}
+    except Exception:
+        return {"status": "degraded", "service": "life-api", "database": False}
 
 @app.get("/auth/google/start")
 def google_start(response: Response):
