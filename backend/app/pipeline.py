@@ -38,13 +38,19 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
             for summary in messages:
                 external_id = summary.get("id")
                 if not external_id: continue
-                await cur.execute("select id from sources where user_id=%s and provider='gmail' and external_id=%s", (user_id, external_id))
+                await cur.execute("select id from obligations where user_id=%s and external_id=%s", (user_id, external_id))
                 if await cur.fetchone(): skipped += 1; continue
+                await cur.execute("select id from sources where user_id=%s and provider='gmail' and external_id=%s", (user_id, external_id))
+                existing_source = await cur.fetchone()
                 message = await get_message(access_token, external_id)
                 text = gmail_text(message)
                 extracted = await extract_obligation(text, hint, "email")
-                await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'gmail',%s,%s,now()) returning id", (user_id,external_id,text.splitlines()[2][:300] if len(text.splitlines())>2 else "Gmail message"))
-                source_id = (await cur.fetchone())["id"]
+                if existing_source:
+                    source_id = existing_source["id"]
+                    await cur.execute("update sources set last_synced_at=now() where id=%s and user_id=%s", (source_id,user_id))
+                else:
+                    await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'gmail',%s,%s,now()) returning id", (user_id,external_id,text.splitlines()[2][:300] if len(text.splitlines())>2 else "Gmail message"))
+                    source_id = (await cur.fetchone())["id"]
                 if extracted:
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,extracted.due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
                     row = await cur.fetchone()
@@ -63,14 +69,20 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
             for event in events:
                 external_id = event.get("id")
                 if not external_id: continue
-                await cur.execute("select id from sources where user_id=%s and provider='calendar' and external_id=%s", (user_id,external_id))
+                await cur.execute("select id from obligations where user_id=%s and external_id=%s", (user_id,external_id))
                 if await cur.fetchone(): skipped += 1; continue
+                await cur.execute("select id from sources where user_id=%s and provider='calendar' and external_id=%s", (user_id,external_id))
+                existing_source = await cur.fetchone()
                 start = event.get("start", {})
                 start_at = start.get("dateTime") or start.get("date")
                 text = "\n".join(x for x in [f"Event: {event.get('summary','')}",f"Description: {event.get('description','')}",f"Start: {start_at}",f"Location: {event.get('location','')}"] if x)
                 extracted = await extract_obligation(text, hint, "calendar")
-                await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'calendar',%s,%s,now()) returning id", (user_id,external_id,event.get("summary","Calendar event")[:300]))
-                source_id = (await cur.fetchone())["id"]
+                if existing_source:
+                    source_id = existing_source["id"]
+                    await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (event.get("summary","Calendar event")[:300],source_id,user_id))
+                else:
+                    await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'calendar',%s,%s,now()) returning id", (user_id,external_id,event.get("summary","Calendar event")[:300]))
+                    source_id = (await cur.fetchone())["id"]
                 if extracted:
                     due_at = extracted.due_at or start_at
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
