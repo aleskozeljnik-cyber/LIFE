@@ -31,6 +31,7 @@ const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "https://life-productio
 export default function LifePage() {
   const [items,setItems] = useState<Item[]>(demoItems);
   const [live,setLive] = useState(false);
+  const [summary,setSummary] = useState("");
   const [view,setView] = useState<View>("Today");
   const [selected,setSelected] = useState<Item|null>(null);
   const [done,setDone] = useState<string[]>([]);
@@ -57,6 +58,11 @@ export default function LifePage() {
         const data=await r.json();
         if(Array.isArray(data)){
           setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
+          const summaryResponse=await fetch(API_BASE+"/summaries/today",{credentials:"include"});
+          if(summaryResponse.ok){
+            const summaryData=await summaryResponse.json();
+            if(summaryData?.content) setSummary(summaryData.content);
+          }
           setLive(true);
         }
       }catch{}
@@ -118,7 +124,7 @@ export default function LifePage() {
 
         <section className="card main">
           <div className="head"><div><h2>{view}</h2><div className="muted">{view==="Today"?"Your day at a glance":"Demo data · click any item to explore it"}</div></div><input className="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search LIFE…" /></div>
-          {view==="Today" && <div className="brief"><b>AI briefing</b><p>I found {attention.length} things that need your attention. Two are time-sensitive and one is a financial follow-up. Start with the SIJ contract response.</p></div>}
+          {view==="Today" && <div className="brief"><b>{live?"Today briefing":"AI briefing · demo"}</b><p>{live && summary ? summary : "I found "+attention.length+" things that need your attention. Two are time-sensitive and one is a financial follow-up. Start with the SIJ contract response."}</p></div>}
           {view==="Calendar" ? <div>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}</div> :
            visible.length===0 ? <div className="muted" style={{padding:"25px 3px"}}>Nothing here in the demo.</div> :
            visible.map(x=>{const isDone=done.includes(x.id);return <div className="item" key={x.id} onClick={()=>setSelected(x)}><button className={"check "+(isDone?"done":"")} onClick={e=>{e.stopPropagation();toggle(x.id)}}>{isDone?"✓":""}</button><div className="itemmain"><div className="itemtop"><div className={"title "+(isDone?"strike":"")}>{x.title}</div><div className="due">{x.due}</div></div><div className="summary">{x.summary}</div><div className="source">{x.source}</div></div></div>})}
