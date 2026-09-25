@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 type View = "Today" | "Needs attention" | "Inbox" | "Calendar" | "Projects" | "Documents";
 type Item = {
   id: string; title: string; summary: string; source: string; sourceType: "Email"|"Calendar"|"Document"|"Project"|"Google";
-  priority: "High"|"Medium"|"Low"; due: string; view: View; reason?: string; status?: string;
+  priority: "High"|"Medium"|"Low"; category?: string; due: string; view: View; reason?: string; status?: string;
 };
 
 const demoItems: Item[] = [
@@ -35,6 +35,7 @@ export default function LifePage() {
   const [view,setView] = useState<View>("Today");
   const [selected,setSelected] = useState<Item|null>(null);
   const [settingsOpen,setSettingsOpen] = useState(false);
+  const [showAll,setShowAll] = useState(false);
   const [editTitle,setEditTitle] = useState("");
   const [editCategory,setEditCategory] = useState("");
   const [done,setDone] = useState<string[]>([]);
@@ -60,7 +61,7 @@ export default function LifePage() {
         if(!r.ok) return;
         const data=await r.json();
         if(Array.isArray(data)){
-          setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
+          setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
           const summaryResponse=await fetch(API_BASE+"/summaries/today",{credentials:"include"});
           if(summaryResponse.ok){
             const summaryData=await summaryResponse.json();
@@ -83,8 +84,9 @@ export default function LifePage() {
     else if(view==="Needs attention") list = attention;
     else list = items.filter(x=>x.view===view && !effectiveDone.includes(x.id));
     const q=query.toLowerCase().trim();
-    return q ? list.filter(x=>(x.title+" "+x.summary+" "+x.source).toLowerCase().includes(q)) : list;
-  },[items,view,query,done]);
+    const filtered = q ? list.filter(x=>(x.title+" "+x.summary+" "+x.source).toLowerCase().includes(q)) : list;
+    return view==="Today" && !showAll ? filtered.slice(0,5) : filtered;
+  },[items,view,query,done,showAll]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
@@ -135,7 +137,7 @@ export default function LifePage() {
       <div className="layout">
         <nav className="card nav">
           <h4>Workspace</h4>
-          {(["Today","Needs attention","Inbox","Calendar","Projects","Documents"] as View[]).map(v=><button key={v} className={(view===v||(v==="Needs attention"&&view==="Needs attention"))?"active":""} onClick={()=>setView(v)}>{v==="Needs attention"?<span className="attention">Needs attention <span className="badge">{attention.length}</span></span>:v}</button>)}
+          {(["Today","Needs attention","Inbox","Calendar","Projects","Documents"] as View[]).map(v=><button key={v} className={(view===v||(v==="Needs attention"&&view==="Needs attention"))?"active":""} onClick={()=>{setView(v);setShowAll(false)}}>{v==="Needs attention"?<span className="attention">Needs attention <span className="badge">{attention.length}</span></span>:v}</button>)}
           <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={connectGoogle}>{live?"Google connected":"Connect Google"}</button><button onClick={openSettings}>Settings</button>
         </nav>
 
@@ -144,7 +146,8 @@ export default function LifePage() {
           {view==="Today" && <div className="brief"><b>{live?"Today briefing":"AI briefing · demo"}</b><p>{live && summary ? summary : "I found "+attention.length+" things that need your attention. Two are time-sensitive and one is a financial follow-up. Start with the SIJ contract response."}</p></div>}
           {view==="Calendar" ? <div>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}</div> :
            visible.length===0 ? <div className="muted" style={{padding:"25px 3px"}}>Nothing here in the demo.</div> :
-           visible.map(x=>{const isDone=done.includes(x.id);return <div className="item" key={x.id} onClick={()=>{setEditTitle(x.title);setEditCategory("");setSelected(x)}}><button className={"check "+(isDone?"done":"")} onClick={e=>{e.stopPropagation();toggle(x.id)}}>{isDone?"✓":""}</button><div className="itemmain"><div className="itemtop"><div className={"title "+(isDone?"strike":"")}>{x.title}</div><div className="due">{x.due}</div></div><div className="summary">{x.summary}</div><div className="source">{x.source}</div></div></div>})}
+           visible.map(x=>{const isDone=done.includes(x.id);return <div className="item" key={x.id} onClick={()=>{setEditTitle(x.title);setEditCategory("");setSelected(x)}}><button className={"check "+(isDone?"done":"")} onClick={e=>{e.stopPropagation();toggle(x.id)}}>{isDone?"✓":""}</button><div className="itemmain"><div className="itemtop"><div className={"title "+(isDone?"strike":"")}>{x.title}</div><div className="due">{x.due}</div></div><div className="summary">{x.summary}</div><div className="source">{x.source}</div><div className="muted" style={{marginTop:6}}>{x.category||"other"} · {x.reason || "No classification reason available."}</div></div></div>})}
+          {view==="Today" && !showAll && visible.length===5 && <button className="secondary" style={{width:"100%",marginTop:10}} onClick={()=>setShowAll(true)}>Show all</button>}
         </section>
 
         <aside className="card side">
