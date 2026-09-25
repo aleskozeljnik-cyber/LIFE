@@ -43,8 +43,16 @@ export default function LifePage() {
     if(!API_BASE) return;
     const load=async()=>{
       try{
+        const connected=new URLSearchParams(window.location.search).get("connected")==="1";
+        if(connected){
+          await Promise.allSettled([
+            fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
+          ]);
+          window.history.replaceState({},"",window.location.pathname);
+        }
         const d=new Date().toISOString().slice(0,10);
-        const r=await fetch(API_BASE+"/obligations?target_date="+d,{credentials:"include"});
+        const r=await fetch(API_BASE+"/obligations?date="+d,{credentials:"include"});
         if(!r.ok) return;
         const data=await r.json();
         if(Array.isArray(data)){
