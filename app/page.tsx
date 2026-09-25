@@ -26,7 +26,7 @@ const events = [
   ["17:30","Family time","Personal"]
 ];
 
-const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "";
+const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "https://life-production-fd51.up.railway.app";
 
 export default function LifePage() {
   const [items,setItems] = useState<Item[]>(demoItems);
