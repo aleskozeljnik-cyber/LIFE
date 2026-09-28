@@ -3,6 +3,7 @@ from anthropic import AsyncAnthropic
 
 from .config import settings
 
+CLOUDFLARE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -46,7 +47,35 @@ SYSTEM_PROMPT = (
 
 
 def configured_provider() -> str:
-    return settings.ai_provider.strip().lower() or "gemini"
+    return settings.ai_provider.strip().lower() or "cloudflare"
+
+
+def ai_runtime_configured() -> bool:
+    provider = configured_provider()
+    if provider == "cloudflare":
+        return bool(settings.cloudflare_account_id and settings.cloudflare_api_token)
+    return bool({
+        "gemini": settings.gemini_api_key,
+        "openrouter": settings.openrouter_api_key,
+        "anthropic": settings.anthropic_api_key,
+    }.get(provider, ""))
+
+
+def ai_data_usage_status() -> str:
+    provider = configured_provider()
+    if provider == "cloudflare":
+        return "not_used_for_training"
+    if provider == "anthropic":
+        return "not_used_for_training" if settings.anthropic_data_usage_verified else "unknown"
+    if provider == "gemini":
+        return "not_used_for_training" if settings.gemini_paid_tier_verified else "used_for_training"
+    if provider == "openrouter":
+        return "not_used_for_training" if settings.openrouter_data_usage_verified else "unknown"
+    return "unknown"
+
+
+def real_data_processing_allowed() -> bool:
+    return ai_runtime_configured() and ai_data_usage_status() == "not_used_for_training"
 
 
 def configured_model() -> str:
@@ -66,6 +95,30 @@ async def generate_structured(source_text: str, correction_hint: str = "", sourc
         + (f"\nPrior user correction preferences: {correction_hint}" if correction_hint else "")
     )
 
+    if provider == "cloudflare" and settings.cloudflare_account_id and settings.cloudflare_api_token:
+        payload = {
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT + " Return JSON only; no markdown."},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0,
+            "max_tokens": 500,
+        }
+        url = CLOUDFLARE_URL.format(account_id=settings.cloudflare_account_id, model=model)
+        async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {settings.cloudflare_api_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+        result = data.get("result", {}) or {}
+        raw = result.get("response", "")
+        return raw, model
     if provider == "anthropic" and settings.anthropic_api_key:
         client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         response = await client.messages.create(
