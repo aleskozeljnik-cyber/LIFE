@@ -69,7 +69,7 @@ export default function LifePage() {
         const data=await obligationResponse.json();
         if(Array.isArray(data)){
           obligationsCount=data.length;
-          setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:x.sender?"Gmail":"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
+          setItems(data.map((x:any)=>{const provider=x.provider||"google";return {id:x.id,title:x.title,summary:x.summary||"",source:x.sender||provider.charAt(0).toUpperCase()+provider.slice(1),sourceType:provider==="gmail"?"Email":provider==="calendar"?"Calendar":"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status};}));
         }
       }
       summaryOk=summaryResponse.ok;
