@@ -224,7 +224,7 @@ export default function LifePage() {
           <h3>Your day</h3>
           <div className="metric"><b>{attention.length}</b><span>things need attention</span></div>
           <div className="metric"><b>{done.length}</b><span>completed in this session</span></div>
-          <h3 style={{marginTop:20}}>Calendar</h3>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}
+          <h3 style={{marginTop:20}}>Calendar</h3>{live ? (calendarEvents.slice(0,5).map((e:any)=><div className="event" key={e.id}><div className="time">{e.start?.dateTime?new Date(e.start.dateTime).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"All day"}</div><div><b>{e.summary}</b><span>{e.location || (e.start?.date || "Google Calendar")}</span></div></div>)) : events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}
           <button className="cta" onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Start focus session</button>
           <button className="secondary" style={{width:"100%",marginTop:8}} onClick={connectGoogle}>{live?"Google connected":"Connect Google"}</button>
         </aside>
