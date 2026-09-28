@@ -51,6 +51,7 @@ export default function LifePage() {
   const [syncError,setSyncError] = useState("");
   const [loadingLive,setLoadingLive] = useState(false);
   const [calendarEvents,setCalendarEvents] = useState<any[]>([]);
+  const [aiReady,setAiReady] = useState<boolean|null>(null);
   const [seconds,setSeconds] = useState(25*60);
   const [running,setRunning] = useState(false);
   const refreshLive=async()=>{
@@ -99,8 +100,13 @@ export default function LifePage() {
     if(!API_BASE) { setAuthChecked(true); return; }
     const load=async()=>{
       try{
-        const statusResponse=await fetch(API_BASE+"/auth/status",{credentials:"include"});
+        const [statusResponse,healthResponse]=await Promise.all([
+          fetch(API_BASE+"/auth/status",{credentials:"include"}),
+          fetch(API_BASE+"/health",{credentials:"include"})
+        ]);
         const auth=await statusResponse.json();
+        const health=await healthResponse.json().catch(()=>({}));
+        setAiReady(health?.ai_data_usage==="not_used_for_training");
         const connected=new URLSearchParams(window.location.search).get("connected")==="1";
         if(connected){
           await Promise.allSettled([
@@ -233,6 +239,7 @@ export default function LifePage() {
     <div className="shell">
       <header className="top"><div className="brand">LIFE</div><div className="status">{live?("PRIVATE · LIVE"+(userEmail?" · "+userEmail:"")):"PRIVATE · DEMO MODE"}</div></header>
       <section className="hero"><div className="eyebrow">GOOD MORNING, ALEŠ</div><h1>Your life.<br/>Under control.</h1><p>LIFE brings together what matters from your inbox, calendar, documents and projects — then shows you what actually needs your attention.</p></section>
+      {authChecked && !live && aiReady===false && <section className="card onboarding"><div><h3>Live source access is waiting for AI privacy setup</h3><p>Google Gmail and Calendar remain blocked until LIFE has a configured AI provider with verified no-training use. Demo mode stays available meanwhile.</p></div><button className="secondary" onClick={()=>window.location.reload()}>Check again</button></section>}
       {authChecked && !live && <section className="card onboarding"><div><h3>Connect your sources</h3><p>Your data stays private. LIFE reads only the connected provider data shown below, and you can revoke access at any time.</p><div style={{display:"grid",gap:10,marginTop:14}}>{CONNECT_PROVIDERS.map(provider=><div key={provider.id} className="sourcebox" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}><div><b>{provider.label}</b><div className="muted" style={{marginTop:4}}>{provider.description}</div></div><button className="cta" style={{marginTop:0,whiteSpace:"nowrap"}} onClick={()=>connectProvider(provider.id)}>{provider.actionLabel}</button></div>)}</div></div></section>}
 
       <div className="layout">
