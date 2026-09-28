@@ -187,23 +187,16 @@ export default function LifePage() {
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
     sessionStorage.setItem("life_connect_started_at", String(Date.now()));
     try{
-      if(providerId==="google"){
-        const healthResponse=await fetch(API_BASE+"/health",{credentials:"include"});
-        const health=await healthResponse.json().catch(()=>({}));
-        if(health.ai_data_usage !== "not_used_for_training"){
-          sessionStorage.removeItem("life_connect_started_at");
-          notify("LIFE AI processing is not ready yet. Configure Cloudflare Workers AI first.");
-          return;
-        }
-      }
-      const r=await fetch(API_BASE+"/auth/"+providerId+"/start",{credentials:"include"});
-      const d=await r.json();
-      if(d.authorization_url){
-        window.location.href=d.authorization_url;
-      } else {
+      const healthResponse=await fetch(API_BASE+"/health",{credentials:"include"});
+      const health=await healthResponse.json().catch(()=>({}));
+      if(providerId==="google" && health.ai_data_usage !== "not_used_for_training"){
         sessionStorage.removeItem("life_connect_started_at");
-        notify(providerId==="google"?"Google OAuth is not configured":"Provider is not configured");
+        notify("LIFE AI processing is not ready yet. Configure Cloudflare Workers AI first.");
+        return;
       }
+      // OAuth start is a browser redirect endpoint, not a JSON API. Navigating directly
+      // preserves the Google redirect and the OAuth state cookie set by the backend.
+      window.location.assign(API_BASE+"/auth/"+providerId+"/start");
     }catch{
       sessionStorage.removeItem("life_connect_started_at");
       notify("Cannot reach LIFE API");
