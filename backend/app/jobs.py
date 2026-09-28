@@ -49,6 +49,6 @@ async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
     safe_metadata = safe_sync_metadata(result)
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider": provider, "status": "success", "result": safe_result})))
+            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider": provider, "status": "success", **safe_metadata})))
         await conn.commit()
     return result
