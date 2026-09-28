@@ -51,7 +51,10 @@ async def extract_obligation(text: str, correction_hint: str = "", source_type: 
         return _mock_extract(text, source_type)
     client = AsyncAnthropic(api_key=settings.anthropic_api_key)
     context = "\nPrior user correction preferences: " + correction_hint if correction_hint else ""
-    response = await client.messages.create(model=MODEL, max_tokens=700, system="You are LIFE's obligation extraction engine. Extract only actionable obligations or commitments. Return strict JSON object or null. Fields: title, summary, due_at, amount, currency, sender, category, priority, classification_reason, confidence. category: financial|work|personal|legal|family|travel|other. priority: high|medium|low. due_at: ISO-8601 or null. amount: number or null. confidence: 0..1. Never invent missing facts.", messages=[{"role":"user","content":f"Source type: {source_type}\n\nContent:\n{text[:16000]}{context}"}])
+    try:
+        response = await client.messages.create(model=MODEL, max_tokens=700, system="You are LIFE's obligation extraction engine. Extract only actionable obligations or commitments. Return strict JSON object or null. Fields: title, summary, due_at, amount, currency, sender, category, priority, classification_reason, confidence. category: financial|work|personal|legal|family|travel|other. priority: high|medium|low. due_at: ISO-8601 or null. amount: number or null. confidence: 0..1. Never invent missing facts.", messages=[{"role":"user","content":f"Source type: {source_type}\n\nContent:\n{text[:16000]}{context}"}])
+    except Exception as exc:
+        return _mock_extract(text, source_type, f"AI extraction unavailable; LIFE used a safe fallback ({type(exc).__name__}).")
     raw = "".join(block.text for block in response.content if getattr(block, "type", None) == "text").strip()
     if raw.startswith("```"):
         raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
