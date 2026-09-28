@@ -9,14 +9,14 @@ type Item = {
 };
 
 const demoItems: Item[] = [
-  {id:"a1",title:"Reply to SIJ — contract comment",summary:"Legal team sent 3 comments. They are waiting for your response before the next contract version.",source:"Gmail · Luka",sourceType:"Email",priority:"High",due:"Today · 16:00",view:"Needs attention"},
-  {id:"a2",title:"15:00 meeting — prepare 3 decisions",summary:"Energy portfolio meeting. LIFE identified three open decisions from the previous meeting notes.",source:"Calendar · Energy",sourceType:"Calendar",priority:"High",due:"Today · 15:00",view:"Needs attention"},
-  {id:"a3",title:"Invoice €518k still outstanding",summary:"Invoice was issued 9 days ago and is still marked unpaid in the demo finance documents.",source:"Documents · Finance",sourceType:"Document",priority:"High",due:"Today",view:"Needs attention"},
-  {id:"a4",title:"Review TAB BESS performance",summary:"5 MWh / 2 MW asset. Monthly performance pack is ready for review.",source:"Project · TAB Prevalje",sourceType:"Project",priority:"Medium",due:"Tomorrow",view:"Projects"},
-  {id:"a5",title:"Board material — final comments",summary:"Draft board pack has two unresolved comments.",source:"Documents · Board",sourceType:"Document",priority:"Medium",due:"Thu",view:"Documents"},
-  {id:"a6",title:"Follow up with partner",summary:"Waiting for a response after the last commercial discussion.",source:"Gmail · Partner",sourceType:"Email",priority:"Medium",due:"Fri",view:"Inbox"},
-  {id:"a7",title:"Daily planning",summary:"Review priorities and protect focus time.",source:"Calendar · Personal",sourceType:"Calendar",priority:"Low",due:"09:00",view:"Calendar"},
-  {id:"a8",title:"Focus block",summary:"Protected deep-work block.",source:"Calendar · Personal",sourceType:"Calendar",priority:"Low",due:"11:30",view:"Calendar"}
+  {id:"a1",title:"Reply to SIJ — contract comment",summary:"Legal team sent 3 comments. They are waiting for your response before the next contract version.",source:"Gmail · Luka",sourceType:"Email",priority:"High",due:"Today · 16:00",view:"Needs attention",reason:"The email requests a response before the next contract version."},
+  {id:"a2",title:"15:00 meeting — prepare 3 decisions",summary:"Energy portfolio meeting. LIFE identified three open decisions from the previous meeting notes.",source:"Calendar · Energy",sourceType:"Calendar",priority:"High",due:"Today · 15:00",view:"Needs attention",reason:"The calendar commitment starts today and has open decisions attached."},
+  {id:"a3",title:"Invoice €518k still outstanding",summary:"Invoice was issued 9 days ago and is still marked unpaid in the demo finance documents.",source:"Documents · Finance",sourceType:"Document",priority:"High",due:"Today",view:"Needs attention",reason:"The document contains a high-value unpaid invoice requiring follow-up."},
+  {id:"a4",title:"Review TAB BESS performance",summary:"5 MWh / 2 MW asset. Monthly performance pack is ready for review.",source:"Project · TAB Prevalje",sourceType:"Project",priority:"Medium",due:"Tomorrow",view:"Projects",reason:"A performance pack is available and the review is due tomorrow."},
+  {id:"a5",title:"Board material — final comments",summary:"Draft board pack has two unresolved comments.",source:"Documents · Board",sourceType:"Document",priority:"Medium",due:"Thu",view:"Documents",reason:"The draft board pack still has unresolved comments."},
+  {id:"a6",title:"Follow up with partner",summary:"Waiting for a response after the last commercial discussion.",source:"Gmail · Partner",sourceType:"Email",priority:"Medium",due:"Fri",view:"Inbox",reason:"The thread is waiting for a response after the last commercial discussion."},
+  {id:"a7",title:"Daily planning",summary:"Review priorities and protect focus time.",source:"Calendar · Personal",sourceType:"Calendar",priority:"Low",due:"09:00",view:"Calendar",reason:"Calendar entry identified as a personal planning commitment."},
+  {id:"a8",title:"Focus block",summary:"Protected deep-work block.",source:"Calendar · Personal",sourceType:"Calendar",priority:"Low",due:"11:30",view:"Calendar",reason:"Calendar entry is a protected work commitment."}
 ];
 
 const events = [
