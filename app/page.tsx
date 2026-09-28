@@ -48,25 +48,49 @@ export default function LifePage() {
   const [query,setQuery] = useState("");
   const [focus,setFocus] = useState(false);
   const [notice,setNotice] = useState("");
+  const [syncError,setSyncError] = useState("");
+  const [loadingLive,setLoadingLive] = useState(false);
+  const [calendarEvents,setCalendarEvents] = useState<any[]>([]);
   const [seconds,setSeconds] = useState(25*60);
   const [running,setRunning] = useState(false);
   const refreshLive=async()=>{
-    if(!API_BASE) return;
+    if(!API_BASE) return {success:false,obligationsCount:0};
+    setLoadingLive(true);
+    let obligationsOk=false, summaryOk=false, calendarOk=false, obligationsCount=0;
     try{
       const d=new Date().toISOString().slice(0,10);
-      const r=await fetch(API_BASE+"/obligations?date="+d,{credentials:"include"});
-      if(r.ok){
-        const data=await r.json();
+      const [obligationResponse,summaryResponse,calendarResponse]=await Promise.all([
+        fetch(API_BASE+"/obligations?date="+d,{credentials:"include"}),
+        fetch(API_BASE+"/summaries/today",{credentials:"include"}),
+        fetch(API_BASE+"/calendar/upcoming?days=14",{credentials:"include"})
+      ]);
+      obligationsOk=obligationResponse.ok;
+      if(obligationResponse.ok){
+        const data=await obligationResponse.json();
         if(Array.isArray(data)){
-          setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
+          obligationsCount=data.length;
+          setItems(data.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.sender||"Google",sourceType:x.sender?"Gmail":"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status})));
         }
       }
-      const summaryResponse=await fetch(API_BASE+"/summaries/today",{credentials:"include"});
+      summaryOk=summaryResponse.ok;
       if(summaryResponse.ok){
         const summaryData=await summaryResponse.json();
         if(summaryData?.content) setSummary(summaryData.content);
       }
-    }catch{}
+      calendarOk=calendarResponse.ok;
+      if(calendarResponse.ok){
+        const eventsData=await calendarResponse.json();
+        setCalendarEvents(Array.isArray(eventsData)?eventsData:[]);
+      }
+      const success=obligationsOk && summaryOk && calendarOk;
+      setSyncError(success?"": "Some Google data could not be refreshed. Try Sync now.");
+      return {success,obligationsCount};
+    }catch{
+      setSyncError("LIFE could not refresh Google data. Please retry.");
+      return {success:false,obligationsCount};
+    }finally{
+      setLoadingLive(false);
+    }
   };
 
   useEffect(()=>{
@@ -83,15 +107,15 @@ export default function LifePage() {
           ]);
           window.history.replaceState({},"",window.location.pathname);
         }
-        if(auth?.authenticated && auth?.google_connected || connected){
+        if((auth?.authenticated && auth?.google_connected) || connected){
           setLive(true);
           if(auth?.user?.email) setUserEmail(auth.user.email);
-          await refreshLive();
+          const refreshed=await refreshLive();
           if(connected){
             const started=Number(sessionStorage.getItem("life_connect_started_at")||0);
             const elapsed=started?Math.max(0,Math.round((Date.now()-started)/1000)):0;
             sessionStorage.removeItem("life_connect_started_at");
-            setNotice(elapsed?("First live Today loaded in "+elapsed+"s"):"Google connected");
+            setNotice(refreshed.success?(elapsed?("First live Today loaded in "+elapsed+"s"):"Google connected"):"Google connected, but live data needs another refresh.");
           }
         }
       }catch{}
@@ -127,7 +151,7 @@ export default function LifePage() {
   },[items,view,query,done,showAll]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
-  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);try{await Promise.allSettled([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);await refreshLive();notify("Synced just now")}finally{setSyncing(false)}};
+  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch{setSyncError("Google sync failed. Please retry.");notify("Sync failed")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
   const persist=async(id:string,patch:Record<string,string>)=>{
     if(!API_BASE){notify("Live API is not configured");return false}
@@ -169,7 +193,7 @@ export default function LifePage() {
       .side{padding:17px}.side h3{font-size:15px;margin:2px 0 12px}.metric{padding:13px 0;border-top:1px solid #edf0f2}.metric:first-of-type{border-top:0}.metric b{font-size:25px;display:block}.metric span{font-size:11px;color:#85919a}.event{display:flex;gap:12px;padding:11px 0;border-top:1px solid #edf0f2}.time{width:42px;font-size:11px;font-weight:800;color:#7b8790}.event b{font-size:12px}.event span{display:block;color:#89949d;font-size:10px;margin-top:3px}
       .cta{width:100%;border:0;background:#17202a;color:#fff;border-radius:10px;padding:11px;margin-top:12px;font-weight:750;cursor:pointer}.secondary{border:1px solid #dce1e5;background:white;border-radius:10px;padding:9px 11px;font-weight:700;cursor:pointer}
       .drawer{position:fixed;right:16px;top:16px;bottom:16px;width:min(430px,calc(100% - 32px));background:white;border:1px solid #dce1e5;border-radius:20px;box-shadow:0 20px 70px rgba(0,0,0,.18);z-index:10;padding:22px;overflow:auto}.close{float:right;border:0;background:#eef1f3;border-radius:50%;width:34px;height:34px;cursor:pointer}.drawer .label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#909aa3;font-weight:800;margin-top:28px}.drawer h2{font-size:26px;letter-spacing:-1px;margin:9px 0}.drawer p{color:#687681;line-height:1.6;font-size:14px}.sourcebox{background:#f6f8f9;border-radius:12px;padding:13px;margin-top:16px;font-size:12px;color:#687681}.focus{position:fixed;inset:0;background:#f6f7f8;z-index:20;display:grid;place-items:center}.focusbox{text-align:center}.focusbox h2{font-size:62px;letter-spacing:-4px;margin:0}.timer{font-size:80px;font-weight:850;letter-spacing:-5px;margin:24px 0}
-      .notice{position:fixed;right:18px;bottom:18px;background:#17202a;color:white;padding:11px 14px;border-radius:11px;font-size:12px;z-index:30}
+      .notice{position:fixed;right:18px;bottom:18px;background:#17202a;color:white;padding:11px 14px;border-radius:11px;font-size:12px;z-index:30}.loadingbar{margin:-4px 0 12px;background:#f2f5f6;border-radius:10px;padding:9px 11px;font-size:11px;color:#66737e}.errorbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:-4px 0 12px;background:#fff4f3;border:1px solid #f0d4d1;border-radius:10px;padding:10px 11px;font-size:11px;color:#8b4b48}.errorbar .secondary{padding:6px 9px;white-space:nowrap}
       @media(max-width:1000px){.layout{grid-template-columns:155px minmax(0,1fr)}.side{grid-column:2}}@media(max-width:680px){.shell{width:calc(100% - 18px)}.hero{padding:32px 0 22px}.hero h1{letter-spacing:-2.5px}.layout{grid-template-columns:1fr}.nav{display:flex;overflow:auto;gap:3px}.nav h4{display:none}.nav button{white-space:nowrap;width:auto}.side{grid-column:auto}.head{flex-direction:column}.search{width:100%}.itemtop{flex-direction:column;gap:4px}.due{white-space:normal}}
     `}</style>
 
@@ -186,10 +210,12 @@ export default function LifePage() {
         </nav>
 
         <section className="card main">
+          {loadingLive && <div className="loadingbar">Refreshing your live data…</div>}
+          {syncError && <div className="errorbar">{syncError}<button className="secondary" onClick={syncNow} disabled={syncing}>{syncing?"Retrying…":"Retry"}</button></div>}
           <div className="head"><div><h2>{view}</h2><div className="muted">{view==="Today"?(live?"Live data · auto-sync every 15 min":"Your day at a glance"):"Demo data · click any item to explore it"}</div></div><div style={{display:"flex",gap:8,width:"min-content",alignItems:"center"}}>{live&&<button className="secondary" onClick={syncNow} disabled={syncing}>{syncing?"Syncing…":"Sync now"}</button>}<input className="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search LIFE…" /></div></div>
           {view==="Today" && <div className="brief"><b>{live?"Today briefing":"AI briefing · demo"}</b><p>{live && summary ? summary : "I found "+attention.length+" things that need your attention. Two are time-sensitive and one is a financial follow-up. Start with the SIJ contract response."}</p></div>}
-          {view==="Calendar" ? <div>{events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}</div> :
-           visible.length===0 ? <div className="muted" style={{padding:"25px 3px"}}>Nothing here in the demo.</div> :
+          {view==="Calendar" ? <div>{live ? (calendarEvents.length ? calendarEvents.map((e:any)=><div className="event" key={e.id}><div className="time">{e.start?.dateTime?new Date(e.start.dateTime).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"All day"}</div><div><b>{e.summary}</b><span>{e.location || (e.start?.date || "Google Calendar")}</span></div></div>) : <div className="muted" style={{padding:"25px 3px"}}>No upcoming Google Calendar events in the next 14 days.</div>) : events.map(e=><div className="event" key={e[0]}><div className="time">{e[0]}</div><div><b>{e[1]}</b><span>{e[2]}</span></div></div>)}</div> :
+           visible.length===0 ? <div className="muted" style={{padding:"25px 3px"}}>{live?"Nothing due today. LIFE is watching your connected sources.":"Nothing here in the demo."}</div> :
            visible.map(x=>{const isDone=done.includes(x.id);return <div className="item" key={x.id} onClick={()=>{setEditTitle(x.title);setEditCategory("");setSelected(x)}}><button className={"check "+(isDone?"done":"")} onClick={e=>{e.stopPropagation();toggle(x.id)}}>{isDone?"✓":""}</button><div className="itemmain"><div className="itemtop"><div className={"title "+(isDone?"strike":"")}>{x.title}</div><div className="due">{x.due}</div></div><div className="summary">{x.summary}</div><div className="source">{x.source}</div><div className="muted" style={{marginTop:6}}>{x.category||"other"} · {x.reason || "No classification reason available."}</div></div></div>})}
           {view==="Today" && !showAll && visible.length===5 && <button className="secondary" style={{width:"100%",marginTop:10}} onClick={()=>setShowAll(true)}>Show all</button>}
         </section>
