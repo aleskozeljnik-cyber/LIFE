@@ -4,7 +4,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .auth import new_state, sign_session, read_session
+from .auth import new_state, read_session, read_state, sign_session
 from .calendar import list_upcoming_events
 from .config import settings
 from .db import get_connection
@@ -47,19 +47,20 @@ async def health():
         return {"status": "degraded", "service": "life-api", "database": False}
 
 @app.get("/auth/google/start")
-def google_start(response: Response):
+def google_start():
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     state = new_state()
-    response.set_cookie("life_oauth_state", state, httponly=True, secure=True, samesite="lax", max_age=600)
     return {"authorization_url": authorization_url(state)}
 
 @app.get("/auth/google/callback")
-async def google_callback(code: str, state: str, life_oauth_state: str | None = Cookie(default=None)):
+async def google_callback(code: str, state: str):
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
-    if not life_oauth_state or state != life_oauth_state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    try:
+        read_state(state)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
     tokens = await exchange_code(code)
     userinfo = await fetch_userinfo(tokens["access_token"])
     async with await get_connection() as conn:
@@ -88,7 +89,6 @@ async def google_callback(code: str, state: str, life_oauth_state: str | None = 
     target = settings.frontend_url.rstrip("/") + "/?connected=1"
     redirect = RedirectResponse(target, status_code=303)
     redirect.set_cookie("life_session", sign_session(str(user_id)), httponly=True, secure=True, samesite="none", max_age=60*60*24*30)
-    redirect.delete_cookie("life_oauth_state", httponly=True, secure=True, samesite="none")
     return redirect
 
 @app.get("/auth/status")
