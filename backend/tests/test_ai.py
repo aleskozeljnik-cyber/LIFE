@@ -66,3 +66,13 @@ def test_real_google_sync_hard_gate_blocks_before_db_or_google(monkeypatch):
         import asyncio
         asyncio.run(get_google_access_token("user-1"))
     assert exc.value.status_code == 503
+
+
+def test_cloudflare_policy_is_unknown_when_not_configured(monkeypatch):
+    from app.ai import ai_data_usage_status, real_data_processing_allowed
+    from app.config import settings
+    monkeypatch.setattr(settings, "ai_provider", "cloudflare")
+    monkeypatch.setattr(settings, "cloudflare_account_id", "")
+    monkeypatch.setattr(settings, "cloudflare_api_token", "")
+    assert ai_data_usage_status() == "unknown"
+    assert real_data_processing_allowed() is False
