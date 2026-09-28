@@ -84,7 +84,7 @@ export default function LifePage() {
         setCalendarEvents(Array.isArray(eventsData)?eventsData:[]);
       }
       const success=obligationsOk && summaryOk && calendarOk;
-      setSyncError(success?"": "Some Google data could not be refreshed. Try Sync now.");
+      setSyncError(success ? "" : "Some Google data could not be refreshed. Try Sync now.");
       return {success,obligationsCount};
     }catch{
       setSyncError("LIFE could not refresh Google data. Please retry.");
@@ -110,6 +110,8 @@ export default function LifePage() {
         }
         if((auth?.authenticated && auth?.google_connected) || connected){
           setLive(true);
+          setItems([]);
+          setCalendarEvents([]);
           if(auth?.user?.email) setUserEmail(auth.user.email);
           const refreshed=await refreshLive();
           await telemetry("app_opened");
