@@ -78,3 +78,48 @@ def test_cloudflare_policy_is_unknown_when_not_configured(monkeypatch):
     monkeypatch.setattr(settings, "cloudflare_api_token", "")
     assert ai_data_usage_status() == "unknown"
     assert real_data_processing_allowed() is False
+
+    
+    
+def test_cloudflare_adapter_uses_run_endpoint_and_messages(monkeypatch):
+    from app.ai import generate_structured
+    from app.config import settings
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"result": {"response": '{"title":"Pay invoice","summary":"Test obligation","due_at":null,"amount":100,"currency":"EUR","sender":"test@example.com","category":"financial","priority":"high","classification_reason":"The message contains a payment obligation.","confidence":0.91}'}}
+
+    class FakeClient:
+        captured = {}
+
+        def __init__(self, *args, **kwargs):
+            self.captured["timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            self.captured["url"] = url
+            self.captured["headers"] = headers
+            self.captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(settings, "ai_provider", "cloudflare")
+    monkeypatch.setattr(settings, "cloudflare_account_id", "acct")
+    monkeypatch.setattr(settings, "cloudflare_api_token", "token")
+    monkeypatch.setattr(settings, "cloudflare_model", "@cf/zai-org/glm-4.7-flash")
+    monkeypatch.setattr("app.ai.httpx.AsyncClient", FakeClient)
+
+    raw, model = __import__("asyncio").run(generate_structured("Subject: Please pay invoice"))
+    assert model == "@cf/zai-org/glm-4.7-flash"
+    assert FakeClient.captured["url"].endswith("/accounts/acct/ai/run/@cf/zai-org/glm-4.7-flash")
+    assert FakeClient.captured["headers"]["Authorization"] == "Bearer token"
+    assert FakeClient.captured["json"]["messages"][0]["role"] == "system"
+    assert "Please pay invoice" in FakeClient.captured["json"]["messages"][1]["content"]
+    assert '"title":"Pay invoice"' in raw
