@@ -180,6 +180,15 @@ export default function LifePage() {
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
     sessionStorage.setItem("life_connect_started_at", String(Date.now()));
     try{
+      if(providerId==="google"){
+        const healthResponse=await fetch(API_BASE+"/health",{credentials:"include"});
+        const health=await healthResponse.json().catch(()=>({}));
+        if(health.ai_data_usage !== "not_used_for_training"){
+          sessionStorage.removeItem("life_connect_started_at");
+          notify("LIFE AI processing is not ready yet. Configure Cloudflare Workers AI first.");
+          return;
+        }
+      }
       const r=await fetch(API_BASE+"/auth/"+providerId+"/start",{credentials:"include"});
       const d=await r.json();
       if(d.authorization_url){
