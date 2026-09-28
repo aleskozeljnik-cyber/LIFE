@@ -58,7 +58,7 @@ async def extract_obligation(text: str, correction_hint: str = "", source_type: 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        match = re.search(r"\\{.*\\}", raw, flags=re.S)
+        match = re.search(r"\{.*\}", raw, flags=re.S)
         if not match:
             return _mock_extract(text, source_type, "AI returned invalid JSON; LIFE used a safe fallback.")
         try:
