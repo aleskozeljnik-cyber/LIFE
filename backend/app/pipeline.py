@@ -1,6 +1,6 @@
 import base64
 from .db import get_connection
-from .extraction import extract_obligation
+from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
 from .calendar import list_upcoming_events
 
@@ -31,7 +31,7 @@ async def _hint(cur, user_id: str) -> str:
 
 async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
     messages = await list_recent_messages(access_token, days=7)
-    created = skipped = 0
+    created = skipped = prefilter_filtered = 0
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             hint = await _hint(cur, user_id)
@@ -44,6 +44,9 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 existing_source = await cur.fetchone()
                 message = await get_message(access_token, external_id)
                 text = gmail_text(message)
+                if not is_ai_candidate(text, "email"):
+                    prefilter_filtered += 1
+                    continue
                 extracted = await extract_obligation(text, hint, "email")
                 if existing_source:
                     source_id = existing_source["id"]
@@ -58,7 +61,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                         await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
         await conn.commit()
-    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped}
+    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered}
 
 async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
     events = await list_upcoming_events(access_token, days=14)
@@ -88,7 +91,7 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
                     row = await cur.fetchone()
                     if row:
-                        await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],"claude-sonnet-4-5",extracted.confidence,"extracted"))
+                        await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
         await conn.commit()
     return {"events_found":len(events),"obligations_created":created,"events_skipped":skipped}
