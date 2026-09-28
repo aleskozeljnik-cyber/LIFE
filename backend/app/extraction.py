@@ -129,6 +129,8 @@ async def extract_obligation(text: str, correction_hint: str = "", source_type: 
     if generated is None:
         return _mock_extract(text, source_type, fallback_reason)
     raw, model = generated
+    if raw.strip().lower() == "null":
+        return None
     data = _extract_json(raw)
     if data is None:
         return _mock_extract(text, source_type, "AI returned invalid JSON; LIFE used a safe fallback.")
