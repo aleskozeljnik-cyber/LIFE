@@ -92,6 +92,7 @@ async def google_callback(code: str, state: str):
     target = settings.frontend_url.rstrip("/") + "/?connected=1"
     redirect = RedirectResponse(target, status_code=303)
     redirect.set_cookie("life_session", sign_session(str(user_id)), httponly=True, secure=True, samesite="none", max_age=60*60*24*30)
+    await record_usage_event(str(user_id), "authorization_connected", {"provider": "google", "status": "success"})
     return redirect
 
 @app.get("/auth/status")
