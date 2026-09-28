@@ -276,6 +276,8 @@ async def calendar_upcoming(
             }
             for event in events if event.get("id")
         ]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Calendar sync failed. Please retry.") from exc
 
