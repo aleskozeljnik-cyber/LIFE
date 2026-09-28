@@ -50,20 +50,25 @@ async def health():
         return {"status": "degraded", "service": "life-api", "database": False, "google_oauth_configured": bool(settings.google_client_id and settings.google_client_secret), "ai_enabled": ai_runtime_configured(), "ai_provider": configured_provider(), "ai_data_usage": ai_data_usage_status()}
 
 @app.get("/auth/google/start")
-def google_start():
+def google_start(response: Response):
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     state = new_state()
+    response.set_cookie("life_oauth_state", state, httponly=True, secure=True, samesite="none", max_age=600)
     return {"authorization_url": authorization_url(state)}
 
 @app.get("/auth/google/callback")
-async def google_callback(code: str, state: str):
+async def google_callback(code: str, state: str, response: Response, life_oauth_state: str | None = Cookie(default=None)):
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     try:
         read_state(state)
+        if not life_oauth_state or life_oauth_state != state:
+            raise ValueError("OAuth state mismatch")
     except Exception as exc:
+        response.delete_cookie("life_oauth_state", secure=True, samesite="none")
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+    response.delete_cookie("life_oauth_state", secure=True, samesite="none")
     tokens = await exchange_code(code)
     userinfo = await fetch_userinfo(tokens["access_token"])
     async with await get_connection() as conn:
