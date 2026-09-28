@@ -29,8 +29,20 @@ async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
     result = {}
     if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
     if provider in (None, "calendar"): result["calendar"] = await sync_calendar_and_extract(user_id, access_token)
+    # Usage telemetry is deliberately allow-listed: IDs and numeric/technical
+    # fields only. Never place Gmail/calendar content, titles, senders, or bodies here.
+    safe_result = {}
+    for source_name in ("gmail", "calendar"):
+        item = result.get(source_name)
+        if not isinstance(item, dict):
+            continue
+        safe_result[source_name] = {
+            key: int(item[key])
+            for key in ("messages_found", "events_found", "obligations_created", "messages_skipped", "events_skipped", "prefilter_filtered")
+            if key in item
+        }
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider":provider,"result":result})))
+            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider": provider, "status": "success", "result": safe_result})))
         await conn.commit()
     return result
