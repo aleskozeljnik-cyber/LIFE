@@ -136,6 +136,14 @@ async def revoke(response: Response, life_session: str | None = Cookie(default=N
     await record_usage_event(str(user_id), "authorization_revoked", {"provider": "google", "status": "success"})
     return {"status": "revoked"}
 
+@app.post("/telemetry")
+async def telemetry_event(payload: dict, life_session: str | None = Cookie(default=None)):
+    user_id = current_user(life_session)
+    action = str(payload.get("action", ""))
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    await record_usage_event(user_id, action, metadata)
+    return {"status": "accepted"}
+
 @app.get("/users/me")
 async def me(life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
