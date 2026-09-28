@@ -167,14 +167,20 @@ export default function LifePage() {
   const deleteAccount=async()=>{if(!window.confirm("Delete your LIFE account and all stored data? This cannot be undone."))return;try{const r=await api("/users/me",{method:"DELETE"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Account deleted")}catch{notify("Could not delete account")}};
   const connectProvider=async(providerId:string)=>{
     if(!API_BASE){notify("LIFE API URL is not configured yet");return;}
+    sessionStorage.setItem("life_connect_started_at", String(Date.now()));
     try{
       const r=await fetch(API_BASE+"/auth/"+providerId+"/start",{credentials:"include"});
       const d=await r.json();
       if(d.authorization_url){
-        sessionStorage.setItem("life_connect_started_at", String(Date.now()));
         window.location.href=d.authorization_url;
-      } else notify(providerId==="google"?"Google OAuth is not configured":"Provider is not configured");
-    }catch{notify("Cannot reach LIFE API")}
+      } else {
+        sessionStorage.removeItem("life_connect_started_at");
+        notify(providerId==="google"?"Google OAuth is not configured":"Provider is not configured");
+      }
+    }catch{
+      sessionStorage.removeItem("life_connect_started_at");
+      notify("Cannot reach LIFE API");
+    }
   };
   const connectGoogle=()=>connectProvider("google");
   const toggle=(id:string)=>setDone(x=>x.includes(id)?x.filter(y=>y!==id):[...x,id]);
