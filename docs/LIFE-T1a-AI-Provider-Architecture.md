@@ -122,3 +122,51 @@ Cloudflare states that Workers AI Customer Content is not used to train AI model
 - Cloudflare Workers AI JSON mode: https://developers.cloudflare.com/workers-ai/features/json-mode/
 - Google Gemini pricing/data use: https://ai.google.dev/gemini-api/docs/pricing
 - Anthropic commercial data training policy: https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training
+## Logging and telemetry privacy
+
+Usage telemetry is metadata-only. `usage_logs.metadata` and any future Sentry/error-tracking payload may contain only technical identifiers and measurements, for example:
+
+```text
+user/session-independent IDs
+obligation_id
+source_id
+provider
+status_code
+sync status
+message/event counts
+prefilter_filtered
+```
+
+Never log or send to telemetry:
+- raw Gmail/calendar subject
+- message body
+- sender
+- extracted free-text content
+- OAuth access/refresh tokens
+- AI prompts or provider responses
+
+The implementation uses an allow-list when writing sync telemetry so nested provider results cannot accidentally introduce message content later.
+
+## Cheap pre-filter telemetry
+
+For every Gmail sync, LIFE records the number of messages rejected by the deterministic pre-filter as `prefilter_filtered`. This value is a count only and is stored in `usage_logs.metadata`.
+
+The metric is intentionally kept separate from AI extraction outcomes so T1a/T1b analysis can distinguish:
+- messages rejected before AI;
+- messages sent to AI;
+- obligations extracted;
+- messages skipped because they were already processed.
+
+The pre-filter remains recall-first. The metric is required because a false negative at the filter stage is otherwise indistinguishable from a false negative from the model.
+
+## Acceptance criteria for telemetry
+
+Given a real Gmail sync:
+- the sync may write usage telemetry only with allow-listed technical fields;
+- no message subject/body/sender appears in usage metadata;
+- `prefilter_filtered` is present as a numeric count;
+- an extraction error must not include source content in error payloads.
+
+Given a later addition of Sentry or another error tracker:
+- event payloads follow the same metadata-only rule;
+- source content may be attached only after explicit redaction and separate privacy review.
