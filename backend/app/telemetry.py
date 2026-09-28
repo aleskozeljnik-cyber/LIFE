@@ -3,6 +3,8 @@ from psycopg.types.json import Jsonb
 from .db import get_connection
 
 ALLOWED_ACTIONS = {
+    "app_opened",
+    "obligation_corrected",
     "authorization_connected",
     "authorization_revoked",
     "authorization_first_live",
@@ -15,33 +17,21 @@ ALLOWED_ACTIONS = {
 def sanitize_metadata(metadata: dict | None) -> dict:
     metadata = metadata or {}
     allowed = {
-        "source_id",
-        "obligation_id",
-        "provider",
-        "model",
-        "status",
-        "status_code",
-        "message_count",
-        "event_count",
-        "messages_found",
-        "messages_skipped",
-        "prefilter_filtered",
-        "messages_sent_to_ai",
-        "obligations_created",
-        "events_found",
-        "events_skipped",
-        "execution_ms",
+        "source_id", "obligation_id", "provider", "model",
+        "status", "status_code", "message_count", "event_count",
+        "messages_found", "messages_skipped", "prefilter_filtered",
+        "messages_sent_to_ai", "obligations_created", "events_found",
+        "events_skipped", "execution_ms",
     }
-    result = {}
-    for key in allowed:
-        value = metadata.get(key)
-        if isinstance(value, (str, int, float, bool)) and not isinstance(value, str) or isinstance(value, str):
-            result[key] = value
-    return result
+    return {
+        key: value
+        for key, value in metadata.items()
+        if key in allowed and isinstance(value, (str, int, float, bool))
+    }
 
 
 def safe_sync_metadata(result: dict) -> dict:
-    """Allow-list only numeric/technical sync telemetry; never source content."""
+    """Allow-list numeric sync telemetry; never source content."""
     safe_result = {}
     for source_name in ("gmail", "calendar"):
         item = result.get(source_name)
@@ -50,12 +40,8 @@ def safe_sync_metadata(result: dict) -> dict:
         safe_result[source_name] = {
             key: int(item[key])
             for key in (
-                "messages_found",
-                "events_found",
-                "obligations_created",
-                "messages_skipped",
-                "events_skipped",
-                "prefilter_filtered",
+                "messages_found", "events_found", "obligations_created",
+                "messages_skipped", "events_skipped", "prefilter_filtered",
                 "messages_sent_to_ai",
             )
             if key in item
