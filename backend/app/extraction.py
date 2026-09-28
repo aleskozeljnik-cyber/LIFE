@@ -55,7 +55,16 @@ async def extract_obligation(text: str, correction_hint: str = "", source_type: 
     raw = "".join(block.text for block in response.content if getattr(block, "type", None) == "text").strip()
     if raw.startswith("```"):
         raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"\\{.*\\}", raw, flags=re.S)
+        if not match:
+            return _mock_extract(text, source_type, "AI returned invalid JSON; LIFE used a safe fallback.")
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return _mock_extract(text, source_type, "AI returned invalid JSON; LIFE used a safe fallback.")
     if data is None:
         return None
     priority = str(data.get("priority", "medium")).lower()
