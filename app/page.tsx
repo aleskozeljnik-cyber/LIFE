@@ -153,7 +153,7 @@ export default function LifePage() {
     const q=query.toLowerCase().trim();
     const filtered = q ? list.filter(x=>(x.title+" "+x.summary+" "+x.source).toLowerCase().includes(q)) : list;
     return view==="Today" && !showAll ? filtered.slice(0,5) : filtered;
-  },[items,view,query,done,showAll]);
+  },[items,view,query,done,showAll,live]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
   const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch{setSyncError("Google sync failed. Please retry.");notify("Sync failed")}finally{setSyncing(false)}};
