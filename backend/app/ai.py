@@ -80,6 +80,8 @@ def real_data_processing_allowed() -> bool:
 
 def configured_model() -> str:
     provider = configured_provider()
+    if provider == "cloudflare":
+        return settings.cloudflare_model
     if provider == "anthropic":
         return settings.anthropic_model
     if provider == "openrouter":
