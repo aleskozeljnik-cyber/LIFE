@@ -84,7 +84,8 @@ export default function LifePage() {
         setCalendarEvents(Array.isArray(eventsData)?eventsData:[]);
       }
       const success=obligationsOk && summaryOk && calendarOk;
-      setSyncError(success ? "" : "Some Google data could not be refreshed. Try Sync now.");
+      const privacyBlocked=[obligationResponse,summaryResponse,calendarResponse].some(r=>r.status===503);
+      setSyncError(success ? "" : privacyBlocked ? "Google source reading is blocked until LIFE AI privacy setup is complete." : "Some Google data could not be refreshed. Try Sync now.");
       return {success,obligationsCount};
     }catch{
       setSyncError("LIFE could not refresh Google data. Please retry.");
@@ -158,7 +159,7 @@ export default function LifePage() {
   },[items,view,query,done,showAll,live]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
-  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch{setSyncError("Google sync failed. Please retry.");notify("Sync failed")}finally{setSyncing(false)}};
+  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);const blocked=results.some(r=>r.status===503);if(blocked){throw new Error("privacy gate")}if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch(error){const message=error instanceof Error&&error.message==="privacy gate"?"Google source reading is blocked until LIFE AI privacy setup is complete.":"Google sync failed. Please retry.";setSyncError(message);notify(error instanceof Error&&error.message==="privacy gate"?"AI setup required":"Sync failed")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
   const telemetry=async(action:string,metadata:Record<string,string|number|boolean>={})=>{
     if(!API_BASE) return;
