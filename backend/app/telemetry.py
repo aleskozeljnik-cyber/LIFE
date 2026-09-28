@@ -67,10 +67,14 @@ async def record_usage_event(user_id: str, action: str, metadata: dict | None = 
     if action not in ALLOWED_ACTIONS:
         return
     safe = sanitize_metadata(metadata)
-    async with await get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)",
-                (user_id, action, Jsonb(safe)),
-            )
-        await conn.commit()
+    try:
+        async with await get_connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)",
+                    (user_id, action, Jsonb(safe)),
+                )
+            await conn.commit()
+    except Exception:
+        # Telemetry is non-blocking by design.
+        return
