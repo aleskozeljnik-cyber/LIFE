@@ -4,12 +4,12 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .auth import new_state, sign_session, read_session
+from .auth import new_state, read_session, read_state, sign_session
 from .calendar import list_upcoming_events
 from .config import settings
 from .db import get_connection
 from .google import authorization_url, exchange_code, fetch_userinfo, revoke_token
-from .jobs import run_user_sync
+from .jobs import get_google_access_token, run_user_sync
 from .summary import generate_today_summary
 from .security import encrypt_token, decrypt_token
 
@@ -47,19 +47,20 @@ async def health():
         return {"status": "degraded", "service": "life-api", "database": False}
 
 @app.get("/auth/google/start")
-def google_start(response: Response):
+def google_start():
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     state = new_state()
-    response.set_cookie("life_oauth_state", state, httponly=True, secure=True, samesite="lax", max_age=600)
     return {"authorization_url": authorization_url(state)}
 
 @app.get("/auth/google/callback")
-async def google_callback(code: str, state: str, life_oauth_state: str | None = Cookie(default=None)):
+async def google_callback(code: str, state: str):
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
-    if not life_oauth_state or state != life_oauth_state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    try:
+        read_state(state)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
     tokens = await exchange_code(code)
     userinfo = await fetch_userinfo(tokens["access_token"])
     async with await get_connection() as conn:
@@ -88,7 +89,6 @@ async def google_callback(code: str, state: str, life_oauth_state: str | None = 
     target = settings.frontend_url.rstrip("/") + "/?connected=1"
     redirect = RedirectResponse(target, status_code=303)
     redirect.set_cookie("life_session", sign_session(str(user_id)), httponly=True, secure=True, samesite="none", max_age=60*60*24*30)
-    redirect.delete_cookie("life_oauth_state", httponly=True, secure=True, samesite="none")
     return redirect
 
 @app.get("/auth/status")
@@ -202,9 +202,10 @@ async def obligations(target_date: date | None = None, date_param: date | None =
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
-                select id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence,status,source_id
-                from obligations
-                where user_id=%s and (due_at is null or due_at::date=%s)
+                select o.id,o.title,o.summary,o.due_at,o.amount,o.currency,o.sender,s.provider, o.category,o.priority,o.classification_reason,o.confidence,o.status,o.source_id
+                from obligations o
+                left join sources s on s.id=o.source_id
+                where o.user_id=%s and (due_at is null or due_at::date=%s)
                 order by case priority when 'high' then 1 when 'medium' then 2 else 3 end, due_at nulls last
             """, (user_id, target))
             return await cur.fetchall()
@@ -237,6 +238,29 @@ async def today_summary(life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
     content = await generate_today_summary(user_id)
     return {"content": content, "summary_date": date.today()}
+
+@app.get("/calendar/upcoming")
+async def calendar_upcoming(
+    days: int = Query(default=14, ge=1, le=14),
+    life_session: str | None = Cookie(default=None),
+):
+    user_id = current_user(life_session)
+    try:
+        access_token = await get_google_access_token(user_id)
+        events = await list_upcoming_events(access_token, days=days)
+        return [
+            {
+                "id": event.get("id"),
+                "summary": event.get("summary") or "Untitled event",
+                "description": event.get("description") or "",
+                "location": event.get("location") or "",
+                "start": event.get("start") or {},
+                "end": event.get("end") or {},
+            }
+            for event in events if event.get("id")
+        ]
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Calendar sync failed. Please retry.") from exc
 
 @app.post("/sources/gmail/sync")
 async def gmail_sync(life_session: str | None = Cookie(default=None)):
