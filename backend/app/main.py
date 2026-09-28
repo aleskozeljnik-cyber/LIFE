@@ -4,6 +4,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .ai import configured_provider
 from .auth import new_state, read_session, read_state, sign_session
 from .calendar import list_upcoming_events
 from .config import settings
@@ -27,6 +28,14 @@ class ObligationPatch(BaseModel):
     category: str | None = None
     title: str | None = None
 
+
+def ai_runtime_configured() -> bool:
+    provider = configured_provider()
+    return bool({
+        "gemini": settings.gemini_api_key,
+        "openrouter": settings.openrouter_api_key,
+        "anthropic": settings.anthropic_api_key,
+    }.get(provider, ""))
 def current_user(session: str | None):
     if not session:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -42,7 +51,7 @@ async def health():
             async with conn.cursor() as cur:
                 await cur.execute("select 1 as db")
                 row = await cur.fetchone()
-        return {"status": "ok", "service": "life-api", "database": bool(row and row["db"] == 1), "google_oauth_configured": bool(settings.google_client_id and settings.google_client_secret), "ai_enabled": bool(settings.anthropic_api_key)}
+        return {"status": "ok", "service": "life-api", "database": bool(row and row["db"] == 1), "google_oauth_configured": bool(settings.google_client_id and settings.google_client_secret), "ai_enabled": ai_runtime_configured(), "ai_provider": configured_provider()}
     except Exception:
         return {"status": "degraded", "service": "life-api", "database": False, "google_oauth_configured": bool(settings.google_client_id and settings.google_client_secret), "ai_enabled": bool(settings.anthropic_api_key)}
 
