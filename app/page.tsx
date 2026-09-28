@@ -58,7 +58,8 @@ export default function LifePage() {
     setLoadingLive(true);
     let obligationsOk=false, summaryOk=false, calendarOk=false, obligationsCount=0;
     try{
-      const d=new Date().toISOString().slice(0,10);
+      const now=new Date();
+      const d=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
       const [obligationResponse,summaryResponse,calendarResponse]=await Promise.all([
         fetch(API_BASE+"/obligations?date="+d,{credentials:"include"}),
         fetch(API_BASE+"/summaries/today",{credentials:"include"}),
@@ -191,7 +192,13 @@ export default function LifePage() {
     }
   };
   const connectGoogle=()=>connectProvider("google");
-  const toggle=(id:string)=>setDone(x=>x.includes(id)?x.filter(y=>y!==id):[...x,id]);
+  const toggle=(id:string)=>{
+    if(live){
+      void confirmItem(id);
+      return;
+    }
+    setDone(x=>x.includes(id)?x.filter(y=>y!==id):[...x,id]);
+  };
 
   return <main className="life">
     <style>{`
