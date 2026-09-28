@@ -44,9 +44,9 @@ No frontend, database, correction, sync, or Today UI changes are required.
 
 ## Temporary free AI
 
-Gemini is the default temporary/dev provider. The selected model is `gemini-3.1-flash-lite`.
+Cloudflare Workers AI is the default privacy-safe free/dev provider for T1a real-data testing. The selected model is `@cf/zai-org/glm-4.7-flash`. Gemini remains available for development/synthetic data, but real user data is blocked until the Gemini Paid Tier has been independently verified.
 
-OpenRouter is available as an optional development provider using `openrouter/free`. Its free model pool is dynamic.
+OpenRouter is available as an optional development provider using `openrouter/free`. Its free model pool is dynamic and its real-data privacy status must be independently verified before use.
 
 Free providers are intended for development/testing. Before processing sensitive real pilot mail, confirm that the selected provider's data handling is acceptable.
 
@@ -93,3 +93,32 @@ model
 - Gemini structured output: https://ai.google.dev/gemini-api/docs/structured-output
 - OpenRouter free models: https://openrouter.ai/collections/free-models
 - OpenRouter free router: https://openrouter.ai/openrouter/free
+## Real-data privacy gate
+
+LIFE exposes ai_data_usage from GET /health and permits real Google source reads only when both conditions are true:
+
+- an AI provider is configured;
+- ai_data_usage == not_used_for_training.
+
+The gate runs before the Google access token is used for Gmail or Calendar reads. Unsafe or unverified providers return HTTP 503 and do not start source synchronization.
+
+Current policy:
+
+| Provider | Real-data policy |
+|---|---|
+| Cloudflare Workers AI | allowed on documented no-training policy when configured |
+| Anthropic commercial API | allowed when commercial API privacy status is verified |
+| Gemini Free | blocked |
+| Gemini Paid | allowed only after Paid Tier verification |
+| OpenRouter | blocked until provider/model data handling is verified |
+| Unknown | blocked |
+
+Cloudflare states that Workers AI Customer Content is not used to train AI models or improve Cloudflare/third-party services without explicit consent. Workers AI currently has a Free plan allocation of 10,000 Neurons/day. JSON mode is supported by a defined subset of models; the selected GLM model is used with strict JSON prompting and LIFE validation, with local fallback on invalid output.
+
+## Sources
+
+- Cloudflare Workers AI data usage: https://developers.cloudflare.com/workers-ai/platform/data-usage/
+- Cloudflare Workers AI pricing/free allocation: https://developers.cloudflare.com/workers-ai/platform/pricing/
+- Cloudflare Workers AI JSON mode: https://developers.cloudflare.com/workers-ai/features/json-mode/
+- Google Gemini pricing/data use: https://ai.google.dev/gemini-api/docs/pricing
+- Anthropic commercial data training policy: https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training
