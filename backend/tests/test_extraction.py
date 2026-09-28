@@ -31,3 +31,8 @@ def test_candidate_prefilter_drops_clear_newsletter():
 def test_json_recovery_handles_fenced_payload():
     from app.extraction import _extract_json
     assert _extract_json("```json\n{\"title\":\"Pay invoice\"}\n```") == {"title": "Pay invoice"}
+
+
+def test_candidate_prefilter_catches_amount_only_financial_email():
+    from app.extraction import is_ai_candidate
+    assert is_ai_candidate("Subject: Account statement\nAmount due 1.250,00 EUR", "email")
