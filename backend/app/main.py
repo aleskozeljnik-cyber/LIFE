@@ -202,9 +202,10 @@ async def obligations(target_date: date | None = None, date_param: date | None =
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
-                select id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence,status,source_id
-                from obligations
-                where user_id=%s and (due_at is null or due_at::date=%s)
+                select o.id,o.title,o.summary,o.due_at,o.amount,o.currency,o.sender,s.provider, o.category,o.priority,o.classification_reason,o.confidence,o.status,o.source_id
+                from obligations o
+                left join sources s on s.id=o.source_id
+                where o.user_id=%s and (due_at is null or due_at::date=%s)
                 order by case priority when 'high' then 1 when 'medium' then 2 else 3 end, due_at nulls last
             """, (user_id, target))
             return await cur.fetchall()
