@@ -36,3 +36,23 @@ def test_gemini_is_blocked_without_paid_tier_verification():
         assert real_data_processing_allowed() is False
     finally:
         monkeypatch.undo()
+
+
+def test_sync_telemetry_allowlist_never_keeps_source_content():
+    from app.jobs import safe_sync_metadata
+    result = {
+        "gmail": {
+            "messages_found": 10,
+            "obligations_created": 2,
+            "messages_skipped": 3,
+            "prefilter_filtered": 5,
+            "subject": "Private invoice",
+            "sender": "person@example.com",
+            "body": "PRIVATE BODY",
+        }
+    }
+    safe = safe_sync_metadata(result)
+    assert safe == {"result": {"gmail": {"messages_found": 10, "obligations_created": 2, "messages_skipped": 3, "prefilter_filtered": 5}}}
+    assert "Private invoice" not in repr(safe)
+    assert "person@example.com" not in repr(safe)
+    assert "PRIVATE BODY" not in repr(safe)
