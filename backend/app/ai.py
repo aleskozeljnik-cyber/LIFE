@@ -64,13 +64,19 @@ def ai_runtime_configured() -> bool:
 def ai_data_usage_status() -> str:
     provider = configured_provider()
     if provider == "cloudflare":
-        return "not_used_for_training"
+        return "not_used_for_training" if ai_runtime_configured() else "unknown"
     if provider == "anthropic":
-        return "not_used_for_training" if settings.anthropic_data_usage_verified else "unknown"
+        return "not_used_for_training" if (
+            settings.anthropic_api_key and settings.anthropic_data_usage_verified
+        ) else "unknown"
     if provider == "gemini":
+        if not settings.gemini_api_key:
+            return "unknown"
         return "not_used_for_training" if settings.gemini_paid_tier_verified else "used_for_training"
     if provider == "openrouter":
-        return "not_used_for_training" if settings.openrouter_data_usage_verified else "unknown"
+        return "not_used_for_training" if (
+            settings.openrouter_api_key and settings.openrouter_data_usage_verified
+        ) else "unknown"
     return "unknown"
 
 
