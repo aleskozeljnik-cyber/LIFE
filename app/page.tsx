@@ -111,6 +111,10 @@ export default function LifePage() {
           setLive(true);
           if(auth?.user?.email) setUserEmail(auth.user.email);
           const refreshed=await refreshLive();
+          await telemetry("app_opened");
+          if(connected && refreshed.success){
+            await telemetry("authorization_first_live");
+          }
           if(connected){
             const started=Number(sessionStorage.getItem("life_connect_started_at")||0);
             const elapsed=started?Math.max(0,Math.round((Date.now()-started)/1000)):0;
@@ -153,13 +157,17 @@ export default function LifePage() {
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
   const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch{setSyncError("Google sync failed. Please retry.");notify("Sync failed")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
+  const telemetry=async(action:string,metadata:Record<string,string|number|boolean>={})=>{
+    if(!API_BASE || !live) return;
+    try{await api("/telemetry",{method:"POST",body:JSON.stringify({action,metadata})});}catch{}
+  };
   const persist=async(id:string,patch:Record<string,string>)=>{
     if(!API_BASE){notify("Live API is not configured");return false}
     try{const r=await api("/obligations/"+id,{method:"PATCH",body:JSON.stringify(patch)});if(!r.ok) throw new Error(); return true}catch{notify("Connect Google first to save changes");return false}
   };
   const confirmItem=async(id:string)=>{if(await persist(id,{status:"done"})){setDone(x=>x.includes(id)?x:[...x,id]);notify("Confirmed");setSelected(null)}};
   const dismissItem=async(id:string)=>{if(await persist(id,{status:"dismissed"})){setDone(x=>x.includes(id)?x:[...x,id]);notify("Dismissed");setSelected(null)}};
-  const correctItem=async(id:string)=>{const patch:Record<string,string>={};if(editCategory)patch.category=editCategory;if(editTitle.trim())patch.title=editTitle.trim();if(!Object.keys(patch).length){notify("Choose a correction first");return}if(await persist(id,patch)){setItems(xs=>xs.map(x=>x.id===id?{...x,...(editTitle.trim()?{title:editTitle.trim()}:{}),...(editCategory?{category:editCategory,reason:"User corrected classification to "+editCategory}: {})}:x));notify("Correction saved");setSelected(null)}};
+  const correctItem=async(id:string)=>{const patch:Record<string,string>={};if(editCategory)patch.category=editCategory;if(editTitle.trim())patch.title=editTitle.trim();if(!Object.keys(patch).length){notify("Choose a correction first");return}if(await persist(id,patch)){await telemetry("obligation_corrected",{obligation_id:id});setItems(xs=>xs.map(x=>x.id===id?{...x,...(editTitle.trim()?{title:editTitle.trim()}:{}),...(editCategory?{category:editCategory,reason:"User corrected classification to "+editCategory}: {})}:x));notify("Correction saved");setSelected(null)}};
   const openSettings=()=>setSettingsOpen(true);
   const exportData=async()=>{try{const r=await api("/users/me/export");if(!r.ok)throw new Error();const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download="life-export.json";a.click();URL.revokeObjectURL(u);notify("Export downloaded")}catch{notify("Connect Google first")}};
   const revokeAccess=async()=>{if(!window.confirm("Revoke Google access and sign out?"))return;try{const r=await api("/auth/revoke",{method:"POST"});if(!r.ok)throw new Error();setLive(false);setItems(demoItems);setDone([]);setSettingsOpen(false);notify("Google access revoked")}catch{notify("Could not revoke access")}};
