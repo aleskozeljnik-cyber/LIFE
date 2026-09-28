@@ -17,6 +17,8 @@ def test_cloudflare_is_marked_no_training(monkeypatch):
     from app.ai import ai_data_usage_status
     from app.config import settings
     monkeypatch.setattr(settings, "ai_provider", "cloudflare")
+    monkeypatch.setattr(settings, "cloudflare_account_id", "test-account")
+    monkeypatch.setattr(settings, "cloudflare_api_token", "test-token")
     assert ai_data_usage_status() == "not_used_for_training"
 
 
