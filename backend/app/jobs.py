@@ -1,4 +1,3 @@
-from psycopg.types.json import Jsonb
 from .db import get_connection
 from fastapi import HTTPException
 from .ai import ai_data_usage_status, real_data_processing_allowed
