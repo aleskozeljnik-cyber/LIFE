@@ -61,7 +61,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                         await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
         await conn.commit()
-    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered}
+    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered,"messages_sent_to_ai":len(messages)-skipped-prefilter_filtered}
 
 async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
     events = await list_upcoming_events(access_token, days=14)
