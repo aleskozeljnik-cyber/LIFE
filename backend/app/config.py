@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-5"
-    anthropic_data_usage_verified: bool = True
+    anthropic_data_usage_verified: bool = False
 
     token_encryption_key: str
     session_secret: str
