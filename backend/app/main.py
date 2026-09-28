@@ -42,9 +42,9 @@ async def health():
             async with conn.cursor() as cur:
                 await cur.execute("select 1 as db")
                 row = await cur.fetchone()
-        return {"status": "ok", "service": "life-api", "database": bool(row and row["db"] == 1)}
+        return {"status": "ok", "service": "life-api", "database": bool(row and row["db"] == 1), "google_oauth_configured": bool(settings.google_client_id and settings.google_client_secret), "ai_enabled": bool(settings.anthropic_api_key)}
     except Exception:
-        return {"status": "degraded", "service": "life-api", "database": False}
+        return {"status": "degraded", "service": "life-api", "database": False, "google_oauth_configured": bool(settings.google_client_id and settings.google_client_secret), "ai_enabled": bool(settings.anthropic_api_key)}
 
 @app.get("/auth/google/start")
 def google_start():
