@@ -39,7 +39,7 @@ def test_gemini_is_blocked_without_paid_tier_verification():
 
 
 def test_sync_telemetry_allowlist_never_keeps_source_content():
-    from app.jobs import safe_sync_metadata
+    from app.telemetry import safe_sync_metadata
     result = {
         "gmail": {
             "messages_found": 10,
