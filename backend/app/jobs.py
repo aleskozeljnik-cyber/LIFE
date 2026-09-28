@@ -5,6 +5,7 @@ from .ai import ai_data_usage_status, real_data_processing_allowed
 from .google import refresh_access_token
 from .pipeline import sync_gmail_and_extract, sync_calendar_and_extract
 from .security import decrypt_token, encrypt_token
+from .telemetry import safe_sync_metadata
 
 async def get_google_access_token(user_id: str) -> str:
     if not real_data_processing_allowed():
@@ -23,23 +24,6 @@ async def get_google_access_token(user_id: str) -> str:
                     await cur.execute("update oauth_tokens set access_token_encrypted=%s,expires_at=now()+(%s || ' seconds')::interval,updated_at=now() where user_id=%s and provider='google'", (encrypt_token(access_token), refreshed.get("expires_in",3600), user_id))
                     await conn.commit()
             return access_token
-
-def safe_sync_metadata(result: dict) -> dict:
-    """Allow-list only numeric/technical sync telemetry; never source content."""
-    safe_result = {}
-    for source_name in ("gmail", "calendar"):
-        item = result.get(source_name)
-        if not isinstance(item, dict):
-            continue
-        safe_result[source_name] = {
-            key: int(item[key])
-            for key in (
-                "messages_found", "events_found", "obligations_created",
-                "messages_skipped", "events_skipped", "prefilter_filtered", "messages_sent_to_ai",
-            )
-            if key in item
-        }
-    return {"result": safe_result}
 
 async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
     access_token = await get_google_access_token(user_id)
