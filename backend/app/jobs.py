@@ -24,13 +24,8 @@ async def get_google_access_token(user_id: str) -> str:
                     await conn.commit()
             return access_token
 
-async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
-    access_token = await get_google_access_token(user_id)
-    result = {}
-    if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
-    if provider in (None, "calendar"): result["calendar"] = await sync_calendar_and_extract(user_id, access_token)
-    # Usage telemetry is deliberately allow-listed: IDs and numeric/technical
-    # fields only. Never place Gmail/calendar content, titles, senders, or bodies here.
+def safe_sync_metadata(result: dict) -> dict:
+    """Allow-list only numeric/technical sync telemetry; never source content."""
     safe_result = {}
     for source_name in ("gmail", "calendar"):
         item = result.get(source_name)
@@ -38,9 +33,20 @@ async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
             continue
         safe_result[source_name] = {
             key: int(item[key])
-            for key in ("messages_found", "events_found", "obligations_created", "messages_skipped", "events_skipped", "prefilter_filtered")
+            for key in (
+                "messages_found", "events_found", "obligations_created",
+                "messages_skipped", "events_skipped", "prefilter_filtered",
+            )
             if key in item
         }
+    return {"result": safe_result}
+
+async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
+    access_token = await get_google_access_token(user_id)
+    result = {}
+    if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
+    if provider in (None, "calendar"): result["calendar"] = await sync_calendar_and_extract(user_id, access_token)
+    safe_metadata = safe_sync_metadata(result)
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider": provider, "status": "success", "result": safe_result})))
