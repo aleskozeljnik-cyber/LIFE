@@ -133,6 +133,7 @@ async def revoke(response: Response, life_session: str | None = Cookie(default=N
             await cur.execute("delete from oauth_tokens where user_id=%s", (user_id,))
         await conn.commit()
     response.delete_cookie("life_session")
+    await record_usage_event(str(user_id), "authorization_revoked", {"provider": "google", "status": "success"})
     return {"status": "revoked"}
 
 @app.get("/users/me")
