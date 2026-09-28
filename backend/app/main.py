@@ -13,6 +13,7 @@ from .google import authorization_url, exchange_code, fetch_userinfo, revoke_tok
 from .jobs import get_google_access_token, run_user_sync
 from .summary import generate_today_summary
 from .security import encrypt_token, decrypt_token
+from .telemetry import record_usage_event
 
 app = FastAPI(title="LIFE API", version="1.0.0")
 app.add_middleware(
