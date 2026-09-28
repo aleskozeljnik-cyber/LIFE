@@ -56,3 +56,22 @@ def test_sync_telemetry_allowlist_never_keeps_source_content():
     assert "Private invoice" not in repr(safe)
     assert "person@example.com" not in repr(safe)
     assert "PRIVATE BODY" not in repr(safe)
+
+
+def test_real_google_sync_hard_gate_blocks_before_db_or_google(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+    from app.config import settings
+    from app.jobs import get_google_access_token
+
+    monkeypatch.setattr(settings, "ai_provider", "gemini")
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_paid_tier_verified", False)
+    async def fail_if_connection_attempted():
+        raise AssertionError("DB/Google access must not be attempted while privacy gate is blocked")
+    monkeypatch.setattr("app.jobs.get_connection", fail_if_connection_attempted)
+
+    with pytest.raises(HTTPException) as exc:
+        import asyncio
+        asyncio.run(get_google_access_token("user-1"))
+    assert exc.value.status_code == 503
