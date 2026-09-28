@@ -66,9 +66,7 @@ async def google_callback(code: str, state: str, response: Response, life_oauth_
         if not life_oauth_state or life_oauth_state != state:
             raise ValueError("OAuth state mismatch")
     except Exception as exc:
-        response.delete_cookie("life_oauth_state", secure=True, samesite="none")
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
-    response.delete_cookie("life_oauth_state", secure=True, samesite="none")
     tokens = await exchange_code(code)
     userinfo = await fetch_userinfo(tokens["access_token"])
     async with await get_connection() as conn:
@@ -96,6 +94,7 @@ async def google_callback(code: str, state: str, response: Response, life_oauth_
         await conn.commit()
     target = settings.frontend_url.rstrip("/") + "/?connected=1"
     redirect = RedirectResponse(target, status_code=303)
+    redirect.delete_cookie("life_oauth_state", secure=True, samesite="none")
     redirect.set_cookie("life_session", sign_session(str(user_id)), httponly=True, secure=True, samesite="none", max_age=60*60*24*30)
     await record_usage_event(str(user_id), "authorization_connected", {"provider": "google", "status": "success"})
     return redirect
