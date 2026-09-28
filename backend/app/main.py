@@ -9,7 +9,7 @@ from .calendar import list_upcoming_events
 from .config import settings
 from .db import get_connection
 from .google import authorization_url, exchange_code, fetch_userinfo, revoke_token
-from .jobs import run_user_sync
+from .jobs import get_google_access_token, run_user_sync
 from .summary import generate_today_summary
 from .security import encrypt_token, decrypt_token
 
@@ -237,6 +237,29 @@ async def today_summary(life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
     content = await generate_today_summary(user_id)
     return {"content": content, "summary_date": date.today()}
+
+@app.get("/calendar/upcoming")
+async def calendar_upcoming(
+    days: int = Query(default=14, ge=1, le=14),
+    life_session: str | None = Cookie(default=None),
+):
+    user_id = current_user(life_session)
+    try:
+        access_token = await get_google_access_token(user_id)
+        events = await list_upcoming_events(access_token, days=days)
+        return [
+            {
+                "id": event.get("id"),
+                "summary": event.get("summary") or "Untitled event",
+                "description": event.get("description") or "",
+                "location": event.get("location") or "",
+                "start": event.get("start") or {},
+                "end": event.get("end") or {},
+            }
+            for event in events if event.get("id")
+        ]
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Calendar sync failed. Please retry.") from exc
 
 @app.post("/sources/gmail/sync")
 async def gmail_sync(life_session: str | None = Cookie(default=None)):
