@@ -158,7 +158,7 @@ export default function LifePage() {
   const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch{setSyncError("Google sync failed. Please retry.");notify("Sync failed")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
   const telemetry=async(action:string,metadata:Record<string,string|number|boolean>={})=>{
-    if(!API_BASE || !live) return;
+    if(!API_BASE) return;
     try{await api("/telemetry",{method:"POST",body:JSON.stringify({action,metadata})});}catch{}
   };
   const persist=async(id:string,patch:Record<string,string>)=>{
