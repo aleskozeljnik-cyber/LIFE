@@ -26,13 +26,17 @@ async def get_google_access_token(user_id: str) -> str:
             return access_token
 
 async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
-    access_token = await get_google_access_token(user_id)
-    result = {}
-    if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
-    if provider in (None, "calendar"): result["calendar"] = await sync_calendar_and_extract(user_id, access_token)
-    safe_metadata = {"result": safe_sync_metadata(result)}
-    async with await get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider": provider, "status": "success", **safe_metadata["result"]})))
-        await conn.commit()
-    return result
+    try:
+        access_token = await get_google_access_token(user_id)
+        result = {}
+        if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
+        if provider in (None, "calendar"): result["calendar"] = await sync_calendar_and_extract(user_id, access_token)
+        safe_metadata = safe_sync_metadata(result)
+        await record_usage_event(user_id, "sync", {"provider": provider, "status": "success", **safe_metadata})
+        return result
+    except HTTPException as exc:
+        await record_usage_event(user_id, "sync_error", {"provider": provider, "status": "blocked" if exc.status_code == 503 else "error", "status_code": exc.status_code})
+        raise
+    except Exception:
+        await record_usage_event(user_id, "sync_error", {"provider": provider, "status": "error", "status_code": 502})
+        raise
