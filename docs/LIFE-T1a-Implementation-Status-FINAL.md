@@ -14,6 +14,9 @@ Date: 28 Sep 2026
 - Gmail 7-day and Calendar 14-day pagination are implemented.
 - Today and Calendar live UI are implemented.
 - Corrections, revoke, GDPR export/delete, safe fallback and authorization stopwatch are implemented.
+- Frontend now preflights the AI privacy status before starting Google OAuth.
+- Calendar privacy-gate HTTP 503 responses are preserved end-to-end instead of being converted to generic 502 errors.
+- Onboarding explicitly shows when live source access is waiting for AI privacy setup and provides a re-check action.
 
 ## Automated verification
 
@@ -24,6 +27,12 @@ Date: 28 Sep 2026
 - Railway production deployment: SUCCESS.
 - Vercel backend deployment: SUCCESS.
 - Vercel frontend deployment: SUCCESS.
+
+## Current production baseline
+
+Latest verified main commit: `797982922e7985db8236400f7070c86db4724923`.
+
+Latest production deployment: Railway `8a70379b-f3e5-45a7-b647-e173827cea77`; Vercel backend and LIFE frontend checks are green for the same commit.
 
 ## Real-data gate
 
