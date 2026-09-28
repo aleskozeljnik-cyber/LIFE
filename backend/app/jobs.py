@@ -1,10 +1,14 @@
 from psycopg.types.json import Jsonb
 from .db import get_connection
+from fastapi import HTTPException
+from .ai import ai_data_usage_status, real_data_processing_allowed
 from .google import refresh_access_token
 from .pipeline import sync_gmail_and_extract, sync_calendar_and_extract
 from .security import decrypt_token, encrypt_token
 
 async def get_google_access_token(user_id: str) -> str:
+    if not real_data_processing_allowed():
+        raise HTTPException(status_code=503, detail=f"Real-data processing blocked: AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before syncing user data.")
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("select access_token_encrypted,refresh_token_encrypted,expires_at from oauth_tokens where user_id=%s and provider='google'", (user_id,))
