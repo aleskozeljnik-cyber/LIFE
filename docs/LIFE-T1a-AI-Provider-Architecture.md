@@ -135,6 +135,7 @@ status_code
 sync status
 message/event counts
 prefilter_filtered
+messages_sent_to_ai
 ```
 
 Never log or send to telemetry:
@@ -149,7 +150,7 @@ The implementation uses an allow-list when writing sync telemetry so nested prov
 
 ## Cheap pre-filter telemetry
 
-For every Gmail sync, LIFE records the number of messages rejected by the deterministic pre-filter as `prefilter_filtered`. This value is a count only and is stored in `usage_logs.metadata`.
+For every Gmail sync, LIFE records the number of messages rejected by the deterministic pre-filter as `prefilter_filtered` and `messages_sent_to_ai`. These are numeric counts only and are stored in `usage_logs.metadata`.
 
 The metric is intentionally kept separate from AI extraction outcomes so T1a/T1b analysis can distinguish:
 - messages rejected before AI;
