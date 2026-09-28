@@ -27,6 +27,10 @@ ACTION_WORDS = (
     "reply", "review", "approve", "sign", "send", "pay", "confirm",
     "meeting", "appointment", "invoice", "payment", "renew", "book",
     "accept", "reject", "respond", "action required",
+    "bill", "statement", "reminder", "renewal", "attached",
+    "račun", "plačilo", "plačaj", "rok", "potrdite", "podpis",
+    "sestanek", "termin", "nakazilo", "opomin", "obveznost",
+    "rechnung", "zahlung", "fällig", "unterschrift",
 )
 
 
@@ -34,7 +38,11 @@ def is_ai_candidate(text: str, source_type: str) -> bool:
     if source_type == "calendar":
         return True
     lower = text.lower()
-    return any(word in lower for word in ACTION_WORDS)
+    if any(word in lower for word in ACTION_WORDS):
+        return True
+    # Recall-first: amounts/currencies can identify an actionable financial item
+    # even when it contains none of the action verbs above.
+    return bool(re.search(r"(?:€|eur|usd|\$|gbp|\d[\d.]*[,.]\d{2})", lower))
 
 
 def _mock_extract(text: str, source_type: str, reason: str | None = None) -> ExtractedObligation | None:
