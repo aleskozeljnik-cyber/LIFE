@@ -13,30 +13,21 @@ def test_ai_provider_can_switch_to_claude(monkeypatch):
     assert configured_model() == "claude-sonnet-4-5"
 
 
-def test_cloudflare_is_marked_no_training():
+def test_cloudflare_is_marked_no_training(monkeypatch):
     from app.ai import ai_data_usage_status
     from app.config import settings
-    monkeypatch = __import__("pytest").MonkeyPatch()
-    try:
-        monkeypatch.setattr(settings, "ai_provider", "cloudflare")
-        assert ai_data_usage_status() == "not_used_for_training"
-    finally:
-        monkeypatch.undo()
+    monkeypatch.setattr(settings, "ai_provider", "cloudflare")
+    assert ai_data_usage_status() == "not_used_for_training"
 
 
-def test_gemini_is_blocked_without_paid_tier_verification():
+def test_gemini_is_blocked_without_paid_tier_verification(monkeypatch):
     from app.ai import ai_data_usage_status, real_data_processing_allowed
     from app.config import settings
-    monkeypatch = __import__("pytest").MonkeyPatch()
-    try:
-        monkeypatch.setattr(settings, "ai_provider", "gemini")
-        monkeypatch.setattr(settings, "gemini_paid_tier_verified", False)
-        monkeypatch.setattr(settings, "gemini_api_key", "test-key")
-        assert ai_data_usage_status() == "used_for_training"
-        assert real_data_processing_allowed() is False
-    finally:
-        monkeypatch.undo()
-
+    monkeypatch.setattr(settings, "ai_provider", "gemini")
+    monkeypatch.setattr(settings, "gemini_paid_tier_verified", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    assert ai_data_usage_status() == "used_for_training"
+    assert real_data_processing_allowed() is False
 
 def test_sync_telemetry_allowlist_never_keeps_source_content():
     from app.telemetry import safe_sync_metadata
@@ -52,7 +43,7 @@ def test_sync_telemetry_allowlist_never_keeps_source_content():
         }
     }
     safe = safe_sync_metadata(result)
-    assert safe == {"result": {"gmail": {"messages_found": 10, "obligations_created": 2, "messages_skipped": 3, "prefilter_filtered": 5}}}
+    assert safe == {"gmail": {"messages_found": 10, "obligations_created": 2, "messages_skipped": 3, "prefilter_filtered": 5}}
     assert "Private invoice" not in repr(safe)
     assert "person@example.com" not in repr(safe)
     assert "PRIVATE BODY" not in repr(safe)
