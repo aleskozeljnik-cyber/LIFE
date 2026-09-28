@@ -5,7 +5,7 @@ from .ai import ai_data_usage_status, real_data_processing_allowed
 from .google import refresh_access_token
 from .pipeline import sync_gmail_and_extract, sync_calendar_and_extract
 from .security import decrypt_token, encrypt_token
-from .telemetry import safe_sync_metadata
+from .telemetry import record_usage_event, safe_sync_metadata
 
 async def get_google_access_token(user_id: str) -> str:
     if not real_data_processing_allowed():
@@ -30,9 +30,9 @@ async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
     result = {}
     if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
     if provider in (None, "calendar"): result["calendar"] = await sync_calendar_and_extract(user_id, access_token)
-    safe_metadata = safe_sync_metadata(result)
+    safe_metadata = {"result": safe_sync_metadata(result)}
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider": provider, "status": "success", **safe_metadata})))
+            await cur.execute("insert into usage_logs (user_id,action,metadata) values (%s,%s,%s)", (user_id,"sync",Jsonb({"provider": provider, "status": "success", **safe_metadata["result"]})))
         await conn.commit()
     return result
