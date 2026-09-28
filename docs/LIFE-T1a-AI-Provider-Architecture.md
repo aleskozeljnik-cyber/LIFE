@@ -19,6 +19,8 @@ backend/app/ai.py
 
 ## Environment
 
+Cloudflare is the only default T1a provider. Gemini/OpenRouter/Anthropic are optional switch targets.
+
 ```env
 AI_PROVIDER=gemini
 GEMINI_API_KEY=
