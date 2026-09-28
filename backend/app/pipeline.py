@@ -31,7 +31,7 @@ async def _hint(cur, user_id: str) -> str:
 
 async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
     messages = await list_recent_messages(access_token, days=7)
-    created = skipped = prefilter_filtered = 0
+    created = skipped = prefilter_filtered = messages_sent_to_ai = 0
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             hint = await _hint(cur, user_id)
@@ -47,6 +47,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 if not is_ai_candidate(text, "email"):
                     prefilter_filtered += 1
                     continue
+                messages_sent_to_ai += 1
                 extracted = await extract_obligation(text, hint, "email")
                 if existing_source:
                     source_id = existing_source["id"]
@@ -61,7 +62,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                         await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
         await conn.commit()
-    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered,"messages_sent_to_ai":len(messages)-skipped-prefilter_filtered}
+    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered,"messages_sent_to_ai":messages_sent_to_ai}
 
 async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
     events = await list_upcoming_events(access_token, days=14)
