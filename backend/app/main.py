@@ -4,7 +4,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .ai import ai_data_usage_status, ai_runtime_configured, configured_provider
+from .ai import ai_data_usage_status, ai_runtime_configured, configured_provider, real_data_processing_allowed
 from .auth import new_state, read_session, read_state, sign_session
 from .calendar import list_upcoming_events
 from .config import settings
@@ -70,6 +70,13 @@ async def google_callback(code: str, state: str, response: Response, life_oauth_
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
     tokens = await exchange_code(code)
     userinfo = await fetch_userinfo(tokens["access_token"])
+    # Privacy hard gate: do not persist connected real-user data until the
+    # configured AI provider is verified for the required data-usage posture.
+    if not real_data_processing_allowed():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Real-data processing blocked: AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.",
+        )
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
