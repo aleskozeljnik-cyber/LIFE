@@ -1,5 +1,6 @@
 from urllib.parse import urlencode
 import httpx
+from fastapi import HTTPException
 from .config import settings
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -35,7 +36,19 @@ async def exchange_code(code: str) -> dict:
             "redirect_uri": settings.google_redirect_uri,
             "grant_type": "authorization_code",
         })
-        response.raise_for_status()
+        if response.is_error:
+            try:
+                payload = response.json()
+            except Exception:
+                payload = {}
+            safe_error = {
+                "error": payload.get("error"),
+                "error_description": payload.get("error_description"),
+            }
+            raise HTTPException(
+                status_code=502,
+                detail={"provider": "google", "message": "OAuth token exchange failed", **safe_error},
+            )
         return response.json()
 
 async def refresh_access_token(refresh_token: str) -> dict:
