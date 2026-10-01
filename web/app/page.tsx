@@ -73,6 +73,7 @@ export default function LifePage() {
         if(Array.isArray(lifeData)){
           obligationsCount=lifeData.length;
           setItems(lifeData.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.source_count>1?`${x.source_count} connected sources`:(x.evidence?.[0]?.provider||"Google"),sourceType:x.source_count>1?"Google":(x.evidence?.[0]?.provider==="gmail"?"Email":x.evidence?.[0]?.provider==="calendar"?"Calendar":"Google"),priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.next_action||"Connected information requires a next step.",nextAction:x.next_action,status:x.status,sourceCount:x.source_count,evidence:x.evidence||[]})));
+          setSummary(lifeData.length ? lifeData.slice(0,3).map((x:any)=>`${x.title} — ${x.next_action||"Preglej naslednji korak."}`).join(" · ") : "Nothing needs your attention today. LIFE is watching your connected sources.");
         }
       } else if(obligationResponse.ok){
         const data=await obligationResponse.json();
