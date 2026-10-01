@@ -70,8 +70,6 @@ async def google_callback(code: str, state: str, response: Response, life_oauth_
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
     tokens = await exchange_code(code)
     userinfo = await fetch_userinfo(tokens["access_token"])
-    # Privacy hard gate: do not persist connected real-user data until the
-    # configured AI provider is verified for the required data-usage posture.
     if not real_data_processing_allowed():
         raise HTTPException(
             status_code=503,
@@ -209,6 +207,21 @@ async def sources(life_session: str | None = Cookie(default=None)):
             await cur.execute("select id,provider,title,last_synced_at,created_at from sources where user_id=%s order by created_at desc", (user_id,))
             return await cur.fetchall()
 
+# IMPORTANT: fixed-route provider sync endpoints must be declared before
+# the parameterized /sources/{source_id}/sync route, otherwise "gmail" and
+# "calendar" are captured as source_id and PostgreSQL rejects them as UUIDs.
+@app.post("/sources/gmail/sync")
+async def gmail_sync(life_session: str | None = Cookie(default=None)):
+    user_id = current_user(life_session)
+    result = await run_user_sync(user_id, "gmail")
+    return {"provider": "gmail", "result": result["gmail"]}
+
+@app.post("/sources/calendar/sync")
+async def calendar_sync(life_session: str | None = Cookie(default=None)):
+    user_id = current_user(life_session)
+    result = await run_user_sync(user_id, "calendar")
+    return {"provider": "calendar", "result": result["calendar"]}
+
 @app.post("/sources/{source_id}/sync")
 async def sync_source(source_id: str, life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
@@ -288,15 +301,3 @@ async def calendar_upcoming(
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Calendar sync failed. Please retry.") from exc
-
-@app.post("/sources/gmail/sync")
-async def gmail_sync(life_session: str | None = Cookie(default=None)):
-    user_id = current_user(life_session)
-    result = await run_user_sync(user_id, "gmail")
-    return {"provider": "gmail", "result": result["gmail"]}
-
-@app.post("/sources/calendar/sync")
-async def calendar_sync(life_session: str | None = Cookie(default=None)):
-    user_id = current_user(life_session)
-    result = await run_user_sync(user_id, "calendar")
-    return {"provider": "calendar", "result": result["calendar"]}
