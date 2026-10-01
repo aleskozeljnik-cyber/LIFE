@@ -48,16 +48,21 @@ def _actionability(row: dict[str,Any]) -> float:
 def _priority_rank(value: str | None) -> int:
     return {"high":3,"medium":2,"low":1}.get((value or "").lower(),1)
 
+def _context_tokens(row: dict[str,Any]) -> set[str]:
+    return _tokens(" ".join(str(row.get(k) or "") for k in ("title","summary","sender","source_title")))
+
 def _cluster(rows: list[dict[str,Any]]) -> list[list[dict[str,Any]]]:
     groups=[]
     for row in rows:
-        title=re.sub(r"^(re|fw|fwd)\s*:\s*","",(row.get("title") or "").lower()).strip()
-        tokens=_tokens(title); sender=_tokens(row.get("sender")); best=None; best_score=0.0
+        tokens=_context_tokens(row); sender=_tokens(row.get("sender")); best=None; best_score=0.0
         for i,g in enumerate(groups):
-            gt=set().union(*(_tokens(re.sub(r"^(re|fw|fwd)\s*:\s*","",(x.get("title") or "").lower())) for x in g))
-            overlap=len(tokens & gt); union=len(tokens | gt) or 1; score=overlap/union
+            gt=set().union(*(_context_tokens(x) for x in g))
+            overlap=len(tokens & gt); union=len(tokens | gt) or 1
+            score=overlap/union
             if sender and any(sender & _tokens(x.get("sender")) for x in g): score+=0.20
-            if row.get("provider")!=g[0].get("provider") and overlap>=1: score+=0.05
+            if row.get("provider")!=g[0].get("provider") and overlap>=1: score+=0.12
+            distinctive={t for t in tokens & gt if len(t)>=5 and t not in {"please","today","tomorrow","google","calendar"}}
+            if row.get("provider")!=g[0].get("provider") and distinctive: score+=0.10
             if score>best_score: best_score,best=score,i
         if best is not None and best_score>=0.30: groups[best].append(row)
         else: groups.append([row])
@@ -66,6 +71,10 @@ def _cluster(rows: list[dict[str,Any]]) -> list[list[dict[str,Any]]]:
 def _next_action(rows: list[dict[str,Any]]) -> str:
     titles=" ".join((r.get("title") or "") for r in rows).lower()
     category=next((r.get("category") for r in rows if r.get("category")),"other")
+    providers={r.get("provider") for r in rows if r.get("provider")}
+    titles_lower=titles
+    if "calendar" in providers and len(providers)>1 and any(x in titles_lower for x in ("sestanek","meeting","appointment","vabilo","seja","event")):
+        return "Pred dogodkom preglej povezane maile in pripravi ključne točke oziroma odprte odločitve."
     if any(x in titles for x in ("faktura","račun","invoice")): return "Preveri status računa/fakture in uredi naslednji korak."
     if any(x in titles for x in ("pogodba","contract","mandate","agreement")): return "Preglej odprte pripombe in pripravi/pošlji naslednji odgovor."
     if any(x in titles for x in ("waiting for","čakam","awaiting")): return "Preveri, ali je potreben tvoj odgovor ali follow-up."
@@ -125,7 +134,7 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                         d=due_at if due_at.tzinfo else due_at.replace(tzinfo=timezone.utc)
                         if (d-datetime.now(timezone.utc)).total_seconds()<=24*3600: priority="high"
                     except Exception: pass
-                key_tokens=sorted(set().union(*(_tokens(re.sub(r"^(re|fw|fwd)\s*:\s*","",(r.get("title") or "").lower())) for r in group)))
+                key_tokens=sorted(set().union(*(_context_tokens(r) for r in group)))
                 cluster_key="-".join(key_tokens[:10]) or f"item-{created}"
                 if len(providers)>1: cross_source+=1
                 await cur.execute("""insert into life_items
