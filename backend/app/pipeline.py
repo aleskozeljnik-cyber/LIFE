@@ -30,7 +30,7 @@ async def _hint(cur, user_id: str) -> str:
     return "; ".join(f"{r['field_name']}={r['new_value']}" for r in rows)
 
 async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
-    messages = await list_recent_messages(access_token, days=7)
+    messages = await list_recent_messages(access_token, days=7, max_results=100)
     created = skipped = prefilter_filtered = messages_sent_to_ai = 0
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
@@ -48,6 +48,9 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     prefilter_filtered += 1
                     continue
                 messages_sent_to_ai += 1
+                if messages_sent_to_ai > 25:
+                    prefilter_filtered += 1
+                    continue
                 extracted = await extract_obligation(text, hint, "email")
                 if existing_source:
                     source_id = existing_source["id"]
