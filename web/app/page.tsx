@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 type View = "Today" | "Needs attention" | "Inbox" | "Calendar" | "Projects" | "Documents";
 type Item = {
   id: string; title: string; summary: string; source: string; sourceType: "Email"|"Calendar"|"Document"|"Project"|"Google";
-  priority: "High"|"Medium"|"Low"; category?: string; due: string; view: View; reason?: string; status?: string;
+  priority: "High"|"Medium"|"Low"; category?: string; due: string; view: View; reason?: string; status?: string; nextAction?: string; sourceCount?: number; evidence?: any[];
 };
 
 const demoItems: Item[] = [
@@ -61,13 +61,20 @@ export default function LifePage() {
     try{
       const now=new Date();
       const d=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-      const [obligationResponse,summaryResponse,calendarResponse]=await Promise.all([
+      const [lifeResponse,obligationResponse,summaryResponse,calendarResponse]=await Promise.all([
+        fetch(API_BASE+"/life-items?limit=8",{credentials:"include"}),
         fetch(API_BASE+"/obligations?date="+d,{credentials:"include"}),
         fetch(API_BASE+"/summaries/today",{credentials:"include"}),
         fetch(API_BASE+"/calendar/upcoming?days=14",{credentials:"include"})
       ]);
-      obligationsOk=obligationResponse.ok;
-      if(obligationResponse.ok){
+      obligationsOk=obligationResponse.ok && lifeResponse.ok;
+      if(lifeResponse.ok){
+        const lifeData=await lifeResponse.json();
+        if(Array.isArray(lifeData)){
+          obligationsCount=lifeData.length;
+          setItems(lifeData.map((x:any)=>({id:x.id,title:x.title,summary:x.summary||"",source:x.source_count>1?`${x.source_count} connected sources`:(x.evidence?.[0]?.provider||"Google"),sourceType:x.source_count>1?"Google":(x.evidence?.[0]?.provider==="gmail"?"Email":x.evidence?.[0]?.provider==="calendar"?"Calendar":"Google"),priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.next_action||"Connected information requires a next step.",nextAction:x.next_action,status:x.status,sourceCount:x.source_count,evidence:x.evidence||[]})));
+        }
+      } else if(obligationResponse.ok){
         const data=await obligationResponse.json();
         if(Array.isArray(data)){
           obligationsCount=data.length;
@@ -84,7 +91,7 @@ export default function LifePage() {
         const eventsData=await calendarResponse.json();
         setCalendarEvents(Array.isArray(eventsData)?eventsData:[]);
       }
-      const success=obligationsOk && summaryOk && calendarOk;
+      const success=lifeResponse.ok && summaryOk && calendarOk;
       const privacyBlocked=[obligationResponse,summaryResponse,calendarResponse].some(r=>r.status===503);
       setSyncError(success ? "" : privacyBlocked ? "Google source reading is blocked until LIFE AI privacy setup is complete." : "Some Google data could not be refreshed. Try Sync now.");
       return {success,obligationsCount};
@@ -276,7 +283,7 @@ export default function LifePage() {
       <div style={{textAlign:"center",fontSize:10,color:"#9aa3aa",paddingTop:24}}>LIFE · {live ? "live Google data" : "interactive product demo · sample data only"}</div>
     </div>
 
-    {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}<br/><br/><b>Why LIFE flagged this</b><br/>{selected.reason || "Demo classification reason."}</div><div style={{display:"grid",gap:8,marginTop:14}}><button className="cta" onClick={()=>confirmItem(selected.id)}>Confirm</button><button className="secondary" onClick={()=>dismissItem(selected.id)}>Dismiss</button><div style={{borderTop:"1px solid #edf0f2",paddingTop:12,marginTop:4}}><div className="muted" style={{marginBottom:7}}>Correct classification</div><input className="search" style={{width:"100%"}} value={editTitle} onChange={e=>setEditTitle(e.target.value)} placeholder="Correct title (optional)" /><select className="search" style={{width:"100%",marginTop:7}} value={editCategory} onChange={e=>setEditCategory(e.target.value)}><option value="">Keep category</option><option value="financial">Financial</option><option value="work">Work</option><option value="personal">Personal</option><option value="legal">Legal</option><option value="family">Family</option><option value="travel">Travel</option><option value="other">Other</option></select><button className="secondary" style={{marginTop:7,width:"100%"}} onClick={()=>correctItem(selected.id)}>Save correction</button></div></div></div>}
+    {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}<br/><br/><b>Next action</b><br/>{selected.nextAction || selected.reason || "Review and decide the next step."}<br/><br/><b>Why LIFE flagged this</b><br/>{selected.reason || "Connected information from your sources."}{selected.evidence?.length ? <><br/><br/><b>Evidence</b>{selected.evidence.map((e:any,i:number)=><div key={i} style={{marginTop:6}}>{e.provider} · {e.title}</div>)}</> : null}</div><div style={{display:"grid",gap:8,marginTop:14}}><button className="cta" onClick={()=>confirmItem(selected.id)}>Confirm</button><button className="secondary" onClick={()=>dismissItem(selected.id)}>Dismiss</button><div style={{borderTop:"1px solid #edf0f2",paddingTop:12,marginTop:4}}><div className="muted" style={{marginBottom:7}}>Correct classification</div><input className="search" style={{width:"100%"}} value={editTitle} onChange={e=>setEditTitle(e.target.value)} placeholder="Correct title (optional)" /><select className="search" style={{width:"100%",marginTop:7}} value={editCategory} onChange={e=>setEditCategory(e.target.value)}><option value="">Keep category</option><option value="financial">Financial</option><option value="work">Work</option><option value="personal">Personal</option><option value="legal">Legal</option><option value="family">Family</option><option value="travel">Travel</option><option value="other">Other</option></select><button className="secondary" style={{marginTop:7,width:"100%"}} onClick={()=>correctItem(selected.id)}>Save correction</button></div></div></div>}
 
     {settingsOpen&&<div className="drawer"><button className="close" onClick={()=>setSettingsOpen(false)}>×</button><div className="label">Account</div><h2>Settings</h2><p>Control your Google connection and your LIFE data.</p><div className="sourcebox" style={{marginBottom:12}}><b>Google</b><br/>{live?"Connected":"Not connected"}</div><button className="secondary" style={{width:"100%"}} onClick={exportData}>Export my data</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={logout}>Sign out</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={revokeAccess}>Revoke Google access</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={deleteAccount}>Delete LIFE account</button></div>}
 
