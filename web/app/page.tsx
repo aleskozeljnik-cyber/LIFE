@@ -115,6 +115,17 @@ export default function LifePage() {
           ]);
           window.history.replaceState({},"",window.location.pathname);
         }
+        if(auth?.authenticated && auth?.google_connected && !connected){
+          const sourcesResponse=await fetch(API_BASE+"/sources",{credentials:"include"});
+          const sources=await sourcesResponse.json().catch(()=>[]);
+          const providers=new Set(Array.isArray(sources)?sources.map((s:any)=>s?.provider):[]);
+          const missing=[];
+          if(!providers.has("gmail")) missing.push("gmail");
+          if(!providers.has("calendar")) missing.push("calendar");
+          if(missing.length){
+            await Promise.allSettled(missing.map(provider=>fetch(API_BASE+"/sources/"+provider+"/sync",{method:"POST",credentials:"include"})));
+          }
+        }
         if((auth?.authenticated && auth?.google_connected) || connected){
           setLive(true);
           setItems([]);
