@@ -21,11 +21,26 @@ def _noise(row: dict[str,Any]) -> bool:
 
 def _actionability(row: dict[str,Any]) -> float:
     text=_text(row)
-    score=0.55 if row.get("provider")=="calendar" else 0.0
+    if row.get("provider")=="calendar":
+        # Calendar is context by default. Only pull an event into Today when it is close enough
+        # to require preparation or action.
+        due=row.get("due_at")
+        if not due:
+            return 0.15
+        try:
+            d=due if due.tzinfo else due.replace(tzinfo=timezone.utc)
+            hours=(d-datetime.now(timezone.utc)).total_seconds()/3600
+            score=0.85 if hours <= 24 else (0.65 if hours <= 48 else 0.15)
+        except Exception:
+            score=0.35
+        if any(p in text for p in ("decision","odločit","prepare","pripravi","agenda","dnevni red","open","odprto")):
+            score+=0.15
+        return min(score,1.0)
+    score=0.0
     if any(p in text for p in ("reply","respond","response","odgovor","odgovori","potrdi","confirm","review","preglej",
                                "preveri","invoice","račun","faktura","payment","plačilo","deadline","rok","request",
                                "zahteva","waiting","čakam","approve","odobri","comment","komentar","decision")):
-        score+=0.35
+        score+=0.55
     if row.get("due_at"): score+=0.20
     if (row.get("priority") or "").lower()=="high": score+=0.20
     return min(score,1.0)
@@ -55,6 +70,7 @@ def _next_action(rows: list[dict[str,Any]]) -> str:
     if any(x in titles for x in ("pogodba","contract","mandate","agreement")): return "Preglej odprte pripombe in pripravi/pošlji naslednji odgovor."
     if any(x in titles for x in ("waiting for","čakam","awaiting")): return "Preveri, ali je potreben tvoj odgovor ali follow-up."
     if any(x in titles for x in ("sestanek","meeting")): return "Pripravi ključne točke in odprte odločitve za sestanek."
+    if any(x in titles for x in ("vabilo","seja","appointment","event")): return "Preveri dnevni red, lokacijo in ali potrebuješ pripravo."
     if category=="financial": return "Preveri finančni učinek in uredi naslednji korak."
     if category=="legal": return "Preglej pravni vidik in potrdi naslednji korak."
     if category=="work": return "Preglej povezane informacije in določi naslednji korak."
