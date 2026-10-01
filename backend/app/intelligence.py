@@ -16,7 +16,8 @@ def _noise(row: dict[str,Any]) -> bool:
     text=_text(row); category=(row.get("category") or "").lower()
     patterns=("security code","verification code","password reset","ponastavite vaše geslo","welcome to",
               "check out this week","unsubscribe","newsletter","hotel marina","ebike flow",
-              "potrditev vašega naročila","tracking","survey in progress","marketing","promotional")
+              "potrditev vašega naročila","tracking","survey in progress","marketing","promotional",
+              "profesionalna it oprema","rabljeniracunalniki")
     return category in {"marketing","notification","newsletter","travel_deal"} or any(p in text for p in patterns)
 
 def _actionability(row: dict[str,Any]) -> float:
@@ -37,12 +38,18 @@ def _actionability(row: dict[str,Any]) -> float:
             score+=0.15
         return min(score,1.0)
     score=0.0
+    # Explicit requests/actions are meaningful; generic "medium" source priority is not.
     if any(p in text for p in ("reply","respond","response","odgovor","odgovori","potrdi","confirm","review","preglej",
                                "preveri","invoice","račun","faktura","payment","plačilo","deadline","rok","request",
-                               "zahteva","waiting","čakam","approve","odobri","comment","komentar","decision")):
-        score+=0.55
+                               "zahteva","waiting","čakam","approve","odobri","comment","komentar","decision",
+                               "rabim","potrebujem","prosim","pošlji","pošljite","oddaj","oddajte","podpi",
+                               "uredi","pripravi","sporoči","potrdi")):
+        score+=0.65
     if row.get("due_at"): score+=0.20
     if (row.get("priority") or "").lower()=="high": score+=0.20
+    # Outbound/completed threads should not become tasks just because they mention an invoice.
+    if any(p in text for p in ("will be paid","bo plačana","bo plačan","je plačano","plačano","predana računovodstvu","urejeno")):
+        score=min(score,0.20)
     return min(score,1.0)
 
 def _priority_rank(value: str | None) -> int:
@@ -99,11 +106,16 @@ def _group_title(rows: list[dict[str,Any]]) -> str:
     return "LIFE item"
 
 def _group_summary(rows: list[dict[str,Any]]) -> str:
-    summaries=[]
+    # UI summary must be a compact explanation, never a dump of the raw email body.
+    providers=sorted({r.get("provider") for r in rows if r.get("provider")})
+    titles=[]
     for r in sorted(rows,key=_actionability,reverse=True):
-        s=(r.get("summary") or "").strip()
-        if s and s not in summaries:summaries.append(s)
-    return " ".join(summaries[:2]) or "LIFE je povezal informacije iz več virov."
+        t=re.sub(r"^(re|fw|fwd)\s*:\s*","",(r.get("title") or "").strip(),flags=re.I)
+        if t and t not in titles:
+            titles.append(t)
+    if len(providers)>1:
+        return f"Povezano iz virov: {', '.join(providers)} · " + " + ".join(titles[:2])
+    return titles[0] if titles else "LIFE je povezal informacije iz več virov."
 
 def _evidence(rows: list[dict[str,Any]]) -> list[dict[str,Any]]:
     return [{"obligation_id":str(r["id"]),"provider":r.get("provider"),"title":r.get("source_title") or r.get("title"),"sender":r.get("sender"),"due_at":r.get("due_at").isoformat() if r.get("due_at") else None} for r in rows]
@@ -126,7 +138,7 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                     continue
                 providers=sorted({r.get("provider") for r in group if r.get("provider")})
                 category=_category(group)
-                priority="high" if any((r.get("priority") or "").lower()=="high" for r in group) else ("medium" if action>=0.55 else "low")
+                priority="high" if action>=0.85 or any((r.get("priority") or "").lower()=="high" for r in group) else ("medium" if action>=0.55 else "low")
                 due_values=[r.get("due_at") for r in group if r.get("due_at")]
                 due_at=min(due_values) if due_values else None
                 if due_at:
