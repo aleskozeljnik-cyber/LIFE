@@ -85,7 +85,9 @@ export default function LifePage() {
       summaryOk=summaryResponse.ok;
       if(summaryResponse.ok){
         const summaryData=await summaryResponse.json();
-        if(summaryData?.content) setSummary(summaryData.content);
+        // Do not overwrite the LIFE intelligence briefing with the legacy raw-mail summary.
+        // The /life-items response is the source of truth for the live Today briefing.
+        if(!lifeResponse.ok && summaryData?.content) setSummary(summaryData.content);
       }
       calendarOk=calendarResponse.ok;
       if(calendarResponse.ok){
@@ -175,7 +177,7 @@ export default function LifePage() {
   const attention = items.filter(x=>x.view==="Needs attention" && !effectiveDone.includes(x.id));
   const visible = useMemo(()=>{
     let list: Item[];
-    if(view==="Today") list = items.filter(x=>["Needs attention","Calendar"].includes(x.view) && !effectiveDone.includes(x.id));
+    if(view==="Today") list = items.filter(x=>["Needs attention","Today","Calendar"].includes(x.view) && !effectiveDone.includes(x.id));
     else if(view==="Needs attention") list = attention;
     else list = items.filter(x=>x.view===view && !effectiveDone.includes(x.id));
     const q=query.toLowerCase().trim();
