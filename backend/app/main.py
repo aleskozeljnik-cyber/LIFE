@@ -235,10 +235,15 @@ async def sync_source(source_id: str, life_session: str | None = Cookie(default=
     return {"source_id": source_id, "result": await run_user_sync(user_id, source["provider"])}
 
 @app.get("/life-items")
-async def life_items(limit: int = Query(default=8, ge=1, le=20), life_session: str | None = Cookie(default=None)):
+async def life_items(limit: int = Query(default=3, ge=1, le=20), life_session: str | None = Cookie(default=None), response: Response = None):
     user_id = current_user(life_session)
     try:
-        return await get_today_life_items(user_id, limit=limit)
+        items = await get_today_life_items(user_id, limit=limit)
+        if response is not None:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return items
     except Exception as exc:
         raise HTTPException(status_code=503, detail="LIFE intelligence is not ready yet. Run the database migration first.") from exc
 
