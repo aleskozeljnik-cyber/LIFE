@@ -62,7 +62,7 @@ export default function LifePage() {
       const now=new Date();
       const d=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
       const [lifeResponse,obligationResponse,summaryResponse,calendarResponse]=await Promise.all([
-        fetch(API_BASE+"/life-items?limit=8",{credentials:"include"}),
+        fetch(API_BASE+"/life-items?limit=3",{credentials:"include"}),
         fetch(API_BASE+"/obligations?date="+d,{credentials:"include"}),
         fetch(API_BASE+"/summaries/today",{credentials:"include"}),
         fetch(API_BASE+"/calendar/upcoming?days=14",{credentials:"include"})
