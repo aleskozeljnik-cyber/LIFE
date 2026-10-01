@@ -50,12 +50,13 @@ async def health():
         return {"status": "degraded", "service": "life-api", "database": False, "google_oauth_configured": bool(settings.google_client_id and settings.google_client_secret), "ai_enabled": ai_runtime_configured(), "ai_provider": configured_provider(), "ai_data_usage": ai_data_usage_status()}
 
 @app.get("/auth/google/start")
-def google_start(response: Response):
+def google_start():
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     state = new_state()
-    response.set_cookie("life_oauth_state", state, httponly=True, secure=True, samesite="none", max_age=600)
-    return {"authorization_url": authorization_url(state)}
+    redirect = RedirectResponse(authorization_url(state), status_code=303)
+    redirect.set_cookie("life_oauth_state", state, httponly=True, secure=True, samesite="none", max_age=600)
+    return redirect
 
 @app.get("/auth/google/callback")
 async def google_callback(code: str, state: str, response: Response, life_oauth_state: str | None = Cookie(default=None)):
