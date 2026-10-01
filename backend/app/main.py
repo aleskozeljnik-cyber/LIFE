@@ -10,6 +10,7 @@ from .calendar import list_upcoming_events
 from .config import settings
 from .db import get_connection
 from .google import authorization_url, exchange_code, fetch_userinfo, revoke_token
+from .intelligence import get_today_life_items
 from .jobs import get_google_access_token, run_user_sync
 from .summary import generate_today_summary
 from .security import encrypt_token, decrypt_token
@@ -232,6 +233,14 @@ async def sync_source(source_id: str, life_session: str | None = Cookie(default=
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
     return {"source_id": source_id, "result": await run_user_sync(user_id, source["provider"])}
+
+@app.get("/life-items")
+async def life_items(limit: int = Query(default=8, ge=1, le=20), life_session: str | None = Cookie(default=None)):
+    user_id = current_user(life_session)
+    try:
+        return await get_today_life_items(user_id, limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="LIFE intelligence is not ready yet. Run the database migration first.") from exc
 
 @app.get("/obligations")
 async def obligations(target_date: date | None = None, date_param: date | None = Query(default=None, alias="date"), life_session: str | None = Cookie(default=None)):
