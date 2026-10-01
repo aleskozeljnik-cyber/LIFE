@@ -48,7 +48,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     prefilter_filtered += 1
                     continue
                 messages_sent_to_ai += 1
-                if messages_sent_to_ai > 25:
+                if messages_sent_to_ai > 8:
                     prefilter_filtered += 1
                     continue
                 extracted = await extract_obligation(text, hint, "email")
