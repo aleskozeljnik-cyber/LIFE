@@ -1480,3 +1480,46 @@ Before adding more intelligence, verify on real owner data that:
 3. no cross-user data can be returned;
 4. Teams context items without an obligation still retain source/evidence linkage;
 5. Microsoft providers participate in periodic sync when connected.
+
+
+---
+# 26. VALIDATION — LIFE ITEM CONTEXT LINKS PRODUCTION
+
+### 2026-10-02
+
+The Context Links milestone was merged and deployed after a clean CI pass.
+
+Merge:
+- PR #11 — `feat: expose source-backed context on life items`
+- merge commit: `b4a5ad73e980b66e4d328623c28eab6c0b251bf4`
+
+CI:
+- backend: pytest **36 passed** + compileall **SUCCESS**
+- frontend: TypeScript lint **SUCCESS** + production build **SUCCESS**
+
+Railway production:
+- backend deployment `90533075-2cb0-4efc-a049-41c0756a9347` — **SUCCESS**
+- frontend deployment `30b1e58b-1dad-44e5-a30a-c9655a2b0333` — **SUCCESS**
+
+Additional cleanup discovered during CI:
+- the repository contains a stale root `app/page.tsx` in addition to the production `web/app/page.tsx`.
+- Railway production frontend is explicitly configured with root directory `/web`; therefore `web/app/page.tsx` remains the production UI.
+- The stale root page had a broken `obligationResponse` reference and was corrected only to restore repository CI health. It is not used by the Railway production frontend.
+
+Safety validation:
+- no database records were inserted or modified for this feature;
+- related People/Projects are derived only from authenticated-user `context_evidence` and `context_relationships`;
+- the SQL enrichment is explicitly scoped by `user_id` and the returned Life Item obligation IDs;
+- no synthetic Microsoft/Teams data was introduced.
+
+Current product state:
+**SOURCE → CONTEXT → PEOPLE → PROJECT → EVIDENCE → DECIDE → TODAY → related context**
+
+### Next exact quality gate
+
+Do not add more inference yet. First validate the production Life Item drawer against real owner data:
+1. People shown must be participants in the underlying evidence.
+2. Projects shown must have an actual project relationship.
+3. Cross-user leakage must remain impossible through the enrichment query.
+4. Teams context items must retain source/evidence linkage even when they do not become obligations.
+5. Microsoft providers should join the 15-minute sync loop once real tenant credentials are available.
