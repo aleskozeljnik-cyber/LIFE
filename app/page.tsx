@@ -115,11 +115,17 @@ export default function LifePage() {
           ]);
           window.history.replaceState({},"",window.location.pathname);
         }
-        if((auth?.authenticated && auth?.google_connected) || connected){
+        if(auth?.authenticated && auth?.google_connected){
           setLive(true);
           setItems([]);
           setCalendarEvents([]);
           if(auth?.user?.email) setUserEmail(auth.user.email);
+          if(!connected){
+            await Promise.allSettled([
+              fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
+              fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
+            ]);
+          }
           const refreshed=await refreshLive();
           await telemetry("app_opened");
           if(connected && refreshed.success){
