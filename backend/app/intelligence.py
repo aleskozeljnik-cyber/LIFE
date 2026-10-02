@@ -147,7 +147,7 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
             created=cross_source=filtered=0
             for group in groups:
                 action=max((_actionability(r) for r in group),default=0)
-                if action<0.30:
+                if action<0.55:
                     filtered+=1
                     continue
                 providers=sorted({r.get("provider") for r in group if r.get("provider")})
@@ -190,7 +190,7 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
         await conn.commit()
     return {"items_created":created,"cross_source_items":cross_source,"filtered_noise":filtered}
 
-async def get_today_life_items(user_id: str,limit: int=8) -> list[dict[str,Any]]:
+async def get_today_life_items(user_id: str,limit: int=3) -> list[dict[str,Any]]:
     await rebuild_life_items(user_id)
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
