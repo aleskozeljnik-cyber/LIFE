@@ -109,20 +109,52 @@ def topic_tokens(title: str | None) -> set[str]:
     tokens = {normalize_name(x) for x in re.findall(r"[\wÀ-ž]{4,}", title, flags=re.UNICODE)}
     return {x for x in tokens if x and x not in TOPIC_STOPWORDS}
 
-def candidate_topic_names(rows: list[dict]) -> list[str]:
-    """Return conservative topic candidates shared across at least two providers."""
-    token_items: dict[str, set[tuple[str, str]]] = {}
+def _is_distinctive_topic_token(token: str) -> bool:
+    """Reject tokens that are structurally likely to be generic/noise."""
+    if not token or token in TOPIC_STOPWORDS:
+        return False
+    if token.isdigit():
+        return False
+    if len(token) < 4:
+        return False
+    # Purely numeric identifiers such as invoice numbers are not topics.
+    if sum(ch.isalpha() for ch in token) < 2:
+        return False
+    return True
+
+
+def topic_candidate_evidence(rows: list[dict]) -> dict[str, dict[str, Any]]:
+    """Return conservative topic candidates together with explainable evidence."""
+    token_items: dict[str, list[dict]] = {}
     for row in rows:
         item_id = str(row.get("id"))
         provider = row.get("provider") or ""
         for token in topic_tokens(row.get("title")):
-            token_items.setdefault(token, set()).add((provider, item_id))
-    candidates = []
+            if not _is_distinctive_topic_token(token):
+                continue
+            token_items.setdefault(token, []).append({
+                "item_id": item_id,
+                "provider": provider,
+                "title": row.get("title"),
+            })
+
+    candidates: dict[str, dict[str, Any]] = {}
     for token, refs in token_items.items():
-        providers = {provider for provider, _ in refs}
-        if len(refs) >= 2 and len(providers) >= 2:
-            candidates.append(token)
-    return sorted(candidates)
+        providers = sorted({ref["provider"] for ref in refs if ref["provider"]})
+        if len(refs) < 2 or len(providers) < 2:
+            continue
+        candidates[token] = {
+            "signal": "shared_title_token",
+            "providers": providers,
+            "item_ids": [ref["item_id"] for ref in refs],
+            "titles": [ref["title"] for ref in refs[:4]],
+        }
+    return candidates
+
+
+def candidate_topic_names(rows: list[dict]) -> list[str]:
+    """Return conservative topic candidates shared across at least two providers."""
+    return sorted(topic_candidate_evidence(rows))
 
 
 def topic_anchor_tokens(title: str | None) -> set[str]:
