@@ -98,7 +98,7 @@ export default function LifePage() {
         setCalendarEvents(Array.isArray(eventsData)?eventsData:[]);
       }
       const success=lifeResponse.ok && summaryOk && calendarOk;
-      const privacyBlocked=[obligationResponse,summaryResponse,calendarResponse].some(r=>r.status===503);
+      const privacyBlocked=[lifeResponse,summaryResponse,calendarResponse].some(r=>r.status===503) || !obligationsOk;
       setSyncError(success ? "" : privacyBlocked ? "Google source reading is blocked until LIFE AI privacy setup is complete." : "Some Google data could not be refreshed. Try Sync now.");
       return {success,obligationsCount};
     }catch{
