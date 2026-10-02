@@ -1444,3 +1444,39 @@ After the next authenticated owner refresh:
 3. confirm 14001 stays standalone;
 4. inspect cross-source clusters for false positives/false negatives;
 5. expose source-backed People/Projects in the Life Item detail view once the safe write path is available.
+
+
+---
+# 25. PROGRESS UPDATE — LIFE ITEM CONTEXT LINKS
+
+### 2026-10-02
+
+Implemented a presentation-layer bridge from the existing Context Core graph into `/life-items`.
+
+**Rule:** related People and Projects shown on a Life Item must come only from source-backed `context_evidence` → `context_relationships` links. The API does not infer or invent relationships at presentation time.
+
+Backend:
+- `/life-items` now enriches each returned item with `related_people` and `related_projects`.
+- enrichment is scoped to the authenticated user's obligation IDs.
+- people/projects are joined through Context Core relationships attached to the Life Item's underlying evidence.
+- empty relationships are returned as empty arrays, not fabricated labels.
+
+Frontend:
+- Life Item model accepts related People/Projects.
+- Life Item detail drawer displays them only when source-backed links exist.
+
+Validation:
+- owner-pilot production Context Core currently contains 59 context items, 54 people, 1 project, 113 relationships and 78 evidence rows.
+- production inspection confirmed real obligation → context item → person links exist (for example the dividend and invoice cases).
+- no synthetic records were added.
+
+This is intentionally a read-only enrichment step. It does not change clustering, identity resolution, project resolution, or ranking.
+
+### Next quality gate
+
+Before adding more intelligence, verify on real owner data that:
+1. related people shown on a Life Item are actually participants in the underlying evidence;
+2. projects appear only where an explicit/source-backed project relationship exists;
+3. no cross-user data can be returned;
+4. Teams context items without an obligation still retain source/evidence linkage;
+5. Microsoft providers participate in periodic sync when connected.
