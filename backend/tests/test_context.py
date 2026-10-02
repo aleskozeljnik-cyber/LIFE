@@ -44,7 +44,7 @@ def test_shared_person_can_surface_strong_calendar_anchor():
         {"id": "g1", "provider": "gmail", "title": "Dopis članom", "occurred_at": "2026-10-01T09:00:00+00:00", "person_ids": ["p1"]},
         {"id": "c1", "provider": "calendar", "title": "VABILO 7. REDNA SEJA UO RKGV", "occurred_at": "2026-10-02T10:00:00+00:00", "person_ids": ["p1"]},
     ]
-    assert candidate_topic_from_shared_person(rows) == ["rkvg"]
+    assert candidate_topic_from_shared_person(rows) == ["rkgv"]
 
 
 from datetime import timezone
