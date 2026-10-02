@@ -1108,3 +1108,26 @@ Decision:
 - Do not add Outlook yet.
 - Next Context Resolution step should combine stronger deterministic evidence: shared canonical people, temporal proximity, participant overlap, reply/thread relationships, and distinctive multi-word terms.
 - Topic/project creation must remain explainable and evidence-backed; no speculative AI-generated projects.
+
+
+## 2026-10-02 — Context Resolution v2.1 implementation and validation findings
+
+Implemented:
+- Strong Calendar anchor extraction for distinctive uppercase tokens such as `RKGV`.
+- Cross-source topic candidate resolution using shared canonical people between Gmail and Calendar.
+- When Gmail timestamps are available, a 14-day temporal proximity constraint is applied.
+- When Gmail timestamps are unavailable, only a strong Calendar anchor plus shared canonical person is allowed; generic Calendar titles are not promoted to topics.
+- Gmail occurrence time now prefers Gmail `internalDate` and falls back to the RFC `Date` header.
+- Added automated coverage for shared-person + Calendar-anchor resolution.
+
+Validation finding:
+- Production data currently contains 53 Gmail context items and 3 Calendar items, but Gmail `occurred_at` remains NULL after the attempted production sync. The pipeline therefore cannot yet use Gmail time proximity as evidence.
+- The Railway-connected execution path used for one-off sync validation did not produce a database change, so no real topic/project creation is claimed from v2.1 yet.
+- A temporary validation endpoint was attempted but caused an isolated syntax error in the temporary endpoint code; it was immediately removed.
+- Production was restored to the normal backend startup and the cleanup deployment is SUCCESS.
+
+Decision:
+- Do not seed or fabricate topics directly in the database to make the test pass.
+- Keep the v2.1 resolver in code but require real execution evidence before declaring topic resolution successful.
+- Next validation should invoke the authenticated sync path using the real owner session or a dedicated secure internal execution mechanism, then verify a concrete topic such as RKGV and its linked Gmail/Calendar evidence.
+- Do not add Outlook until this owner-pilot Context Resolution path is verified end-to-end.
