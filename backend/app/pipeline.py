@@ -21,6 +21,27 @@ def _walk(part: dict) -> list[str]:
         values.extend(_walk(child))
     return values
 
+def gmail_occurred_at_from_payload(message: dict) -> datetime | None:
+    """Extract Gmail message time from the provider payload."""
+    internal_date = message.get("internalDate")
+    if internal_date is not None:
+        try:
+            return datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc)
+        except (TypeError, ValueError, OSError):
+            pass
+    headers = {h.get("name", "").lower(): h.get("value", "") for h in message.get("payload", {}).get("headers", [])}
+    raw_date = headers.get("date")
+    if raw_date:
+        try:
+            parsed = parsedate_to_datetime(raw_date)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except (TypeError, ValueError, IndexError, OverflowError):
+            pass
+    return None
+
+
 def gmail_text(message: dict) -> str:
     payload = message.get("payload", {})
     headers = {h.get("name", "").lower(): h.get("value", "") for h in payload.get("headers", [])}
@@ -129,19 +150,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 text = gmail_text(message)
                 headers = {h.get("name", "").lower(): h.get("value", "") for h in message.get("payload", {}).get("headers", [])}
                 title = headers.get("subject", "") or summary.get("subject", "") or "Gmail message"
-                gmail_occurred_at = None
-                if message.get("internalDate"):
-                    try:
-                        gmail_occurred_at = datetime.fromtimestamp(int(message["internalDate"]) / 1000, tz=timezone.utc)
-                    except (TypeError, ValueError, OSError):
-                        pass
-                if gmail_occurred_at is None and headers.get("date"):
-                    try:
-                        gmail_occurred_at = parsedate_to_datetime(headers["date"])
-                        if gmail_occurred_at.tzinfo is None:
-                            gmail_occurred_at = gmail_occurred_at.replace(tzinfo=timezone.utc)
-                    except (TypeError, ValueError, IndexError):
-                        pass
+                gmail_occurred_at = gmail_occurred_at_from_payload(message)
                 item_id = await _persist_context_item(cur, user_id, NormalizedItem(
                     provider="gmail", item_type="message", external_id=external_id,
                     title=title[:300], body=text, summary=message.get("snippet", ""), occurred_at=gmail_occurred_at,
