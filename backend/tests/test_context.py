@@ -95,3 +95,25 @@ def test_topic_candidate_keeps_distinctive_shared_anchor():
         {"id": "2", "provider": "calendar", "title": "VABILO RKGV"},
     ]
     assert candidate_topic_names(rows) == ["rkgv"]
+
+
+def test_life_item_evidence_is_source_backed_shape():
+    # Evidence must identify the underlying provider/source rather than only
+    # repeating a generated Life Item summary.
+    row = {
+        "id": "obligation-1",
+        "provider": "gmail",
+        "source_title": "Re: TALUM",
+        "sender": "person@example.com",
+        "due_at": None,
+    }
+    from app.intelligence import _evidence
+    evidence = _evidence([row])
+    assert evidence == [{
+        "obligation_id": "obligation-1",
+        "provider": "gmail",
+        "title": "Re: TALUM",
+        "sender": "person@example.com",
+        "due_at": None,
+        "relationship": "direct_source",
+    }]
