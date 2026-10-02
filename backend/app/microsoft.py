@@ -75,10 +75,29 @@ async def graph_get(access_token: str, path: str, params: dict | None = None) ->
         return response.json()
 
 
-async def list_messages(access_token: str, limit: int = 100) -> list[dict]:
+
+
+async def graph_get_all(access_token: str, path: str, params: dict | None = None, limit: int = 200) -> list[dict]:
+    """Read a Graph collection across pages, capped by the caller's limit."""
+    items: list[dict] = []
+    next_url = f"{GRAPH_BASE}{path}"
+    first = True
+    async with httpx.AsyncClient(timeout=30) as client:
+        while next_url and len(items) < limit:
+            response = await client.get(
+                next_url,
+                headers={"Authorization": f"Bearer {access_token}", "Prefer": 'IdType="ImmutableId"'},
+                params=params if first else None,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            items.extend(payload.get("value", []))
+            next_url = payload.get("@odata.nextLink")
+            first = False
+    return items[:limit]
+\nasync def list_messages(access_token: str, limit: int = 100) -> list[dict]:
     params = {"$top": min(limit, 100), "$select": "id,subject,bodyPreview,receivedDateTime,from,toRecipients,ccRecipients,webLink,isRead"}
-    data = await graph_get(access_token, "/me/mailFolders/inbox/messages", params)
-    return data.get("value", [])
+    return await graph_get_all(access_token, "/me/mailFolders/inbox/messages", params, limit)
 
 
 async def list_events(access_token: str, days: int = 14, limit: int = 100) -> list[dict]:
@@ -92,8 +111,7 @@ async def list_events(access_token: str, days: int = 14, limit: int = 100) -> li
         "$select": "id,subject,bodyPreview,start,end,location,attendees,webLink,organizer,isOnlineMeeting,onlineMeetingUrl",
         "$orderby": "start/dateTime",
     }
-    data = await graph_get(access_token, "/me/calendarView", params)
-    return data.get("value", [])
+    return await graph_get_all(access_token, "/me/calendarView", params, limit)
 
 
 async def list_chats(access_token: str, limit: int = 50) -> list[dict]:
@@ -101,8 +119,7 @@ async def list_chats(access_token: str, limit: int = 50) -> list[dict]:
         "$top": min(limit, 50),
         "$select": "id,topic,chatType,webUrl,lastUpdatedDateTime",
     }
-    data = await graph_get(access_token, "/me/chats", params)
-    return data.get("value", [])
+    return await graph_get_all(access_token, "/me/chats", params, limit)
 
 
 async def list_chat_messages(access_token: str, chat_id: str, limit: int = 50) -> list[dict]:
@@ -111,5 +128,4 @@ async def list_chat_messages(access_token: str, chat_id: str, limit: int = 50) -
         "$select": "id,replyToId,etag,messageType,createdDateTime,lastModifiedDateTime,from,body,webUrl",
         "$orderby": "createdDateTime desc",
     }
-    data = await graph_get(access_token, f"/me/chats/{chat_id}/messages", params)
-    return data.get("value", [])
+    return await graph_get_all(access_token, f"/me/chats/{chat_id}/messages", params, limit)
