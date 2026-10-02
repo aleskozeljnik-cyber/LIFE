@@ -58,6 +58,10 @@ def _priority_rank(value: str | None) -> int:
 def _context_tokens(row: dict[str,Any]) -> set[str]:
     return _tokens(" ".join(str(row.get(k) or "") for k in ("title","summary","sender","source_title")))
 
+def _title_tokens(row: dict[str,Any]) -> set[str]:
+    return _tokens(str(row.get("title") or ""))
+
+
 def _cluster(rows: list[dict[str,Any]]) -> list[list[dict[str,Any]]]:
     groups=[]
     for row in rows:
@@ -74,9 +78,9 @@ def _cluster(rows: list[dict[str,Any]]) -> list[list[dict[str,Any]]]:
             if cross_provider:
                 # Cross-source clustering must have real context linkage. Token coincidence alone
                 # is not sufficient; shared canonical people/projects are strong evidence.
-                if not shared_people and not shared_projects and not (overlap>=2 and distinctive):
+                if not shared_people and not shared_projects and not (len(_title_tokens(row) & set().union(*(_title_tokens(x) for x in g))) >= 2 and distinctive):
                     continue
-                if overlap>=1: score+=0.12
+                if shared_people or shared_projects or len(_title_tokens(row) & set().union(*(_title_tokens(x) for x in g))) >= 2: score+=0.12
                 if distinctive: score+=0.10
                 if shared_people: score+=0.25
                 if shared_projects: score+=0.30
@@ -133,7 +137,7 @@ def _evidence(rows: list[dict[str,Any]]) -> list[dict[str,Any]]:
 async def rebuild_life_items(user_id: str) -> dict[str,int]:
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("""select o.id,o.title,o.summary,o.due_at,o.priority,o.category,o.status,o.sender,o.confidence,s.provider,s.title as source_title
+            await cur.execute("""select o.id,o.title,o.summary,o.due_at,o.priority,o.category,o.status,o.sender,o.confidence,o.source_id,s.provider,s.title as source_title
                                  from obligations o left join sources s on s.id=o.source_id
                                  where o.user_id=%s and o.status='open' order by o.due_at nulls last,o.created_at desc""",(user_id,))
             rows=await cur.fetchall()
