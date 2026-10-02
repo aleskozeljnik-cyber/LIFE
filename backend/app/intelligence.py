@@ -67,9 +67,19 @@ def _cluster(rows: list[dict[str,Any]]) -> list[list[dict[str,Any]]]:
             overlap=len(tokens & gt); union=len(tokens | gt) or 1
             score=overlap/union
             if sender and any(sender & _tokens(x.get("sender")) for x in g): score+=0.20
-            if row.get("provider")!=g[0].get("provider") and overlap>=1: score+=0.12
+            cross_provider=row.get("provider")!=g[0].get("provider")
+            shared_people=set(row.get("person_ids") or []) & set().union(*(set(x.get("person_ids") or []) for x in g))
+            shared_projects=set(row.get("project_ids") or []) & set().union(*(set(x.get("project_ids") or []) for x in g))
             distinctive={t for t in tokens & gt if len(t)>=5 and t not in {"please","today","tomorrow","google","calendar"}}
-            if row.get("provider")!=g[0].get("provider") and distinctive: score+=0.10
+            if cross_provider:
+                # Cross-source clustering must have real context linkage. Token coincidence alone
+                # is not sufficient; shared canonical people/projects are strong evidence.
+                if not shared_people and not shared_projects and not (overlap>=2 and distinctive):
+                    continue
+                if overlap>=1: score+=0.12
+                if distinctive: score+=0.10
+                if shared_people: score+=0.25
+                if shared_projects: score+=0.30
             if score>best_score: best_score,best=score,i
         if best is not None and best_score>=0.30: groups[best].append(row)
         else: groups.append([row])
