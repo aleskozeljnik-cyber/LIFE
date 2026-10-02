@@ -17,7 +17,11 @@ def _noise(row: dict[str,Any]) -> bool:
     patterns=("security code","verification code","password reset","ponastavite vaše geslo","welcome to",
               "check out this week","unsubscribe","newsletter","hotel marina","ebike flow",
               "potrditev vašega naročila","tracking","survey in progress","marketing","promotional",
-              "profesionalna it oprema","rabljeniracunalniki")
+              "profesionalna it oprema","rabljeniracunalniki","super prihranki","izkoristite jih",
+              "we double your winnings","bet now","job alert","jobalerts-noreply","newsletters-noreply",
+              "welcome to fox racing","pozdravljeni na fox racing","obvestilo o dostavi","plain text version not available",
+              "kuponko.si - turizem","podjetna slovenija via linkedin","poslovni dnevnik via linkedin",
+              "save 68%","special offer","bonus offer")
     return category in {"marketing","notification","newsletter","travel_deal"} or any(p in text for p in patterns)
 
 def _actionability(row: dict[str,Any]) -> float:
@@ -39,16 +43,24 @@ def _actionability(row: dict[str,Any]) -> float:
         return min(score,1.0)
     score=0.0
     # Explicit requests/actions are meaningful; generic "medium" source priority is not.
-    if any(p in text for p in ("reply","respond","response","odgovor","odgovori","potrdi","confirm","review","preglej",
-                               "preveri","invoice","račun","faktura","payment","plačilo","deadline","rok","request",
-                               "zahteva","waiting","čakam","approve","odobri","comment","komentar","decision",
-                               "rabim","potrebujem","prosim","pošlji","pošljite","oddaj","oddajte","podpi",
-                               "uredi","pripravi","sporoči","potrdi")):
+    if any(p in text for p in ("reply to", "please reply", "prosimo odgovor", "odgovori", "odgovorite",
+                               "respond to", "potrdi", "potrdite", "confirm", "approve", "odobri", "odobrite",
+                               "preglej", "preglejte", "review", "preveri", "preverite", "payment required",
+                               "plačaj", "plačajte", "pay now", "deadline", "rok za", "action required",
+                               "zahtevamo", "waiting for your", "čakamo na vaš", "comment", "komentiraj",
+                               "decision required", "odloči", "odločite", "pošlji", "pošljite", "oddaj", "oddajte",
+                               "podpiši", "podpišite", "sign and return", "uredi", "pripravi", "pripravite", "sporoči",
+                               "follow up", "follow-up")):
         score+=0.65
+    # Generic nouns such as "invoice" or "please" are not enough by themselves.
+    # They frequently occur in informational mail, newsletters, and already-completed outbound threads.
+    if any(p in text for p in ("invoice", "račun", "faktura", "payment", "plačilo", "dividend", "dividende")):
+        score+=0.25
     if row.get("due_at"): score+=0.20
     if (row.get("priority") or "").lower()=="high": score+=0.20
     # Outbound/completed threads should not become tasks just because they mention an invoice.
-    if any(p in text for p in ("will be paid","bo plačana","bo plačan","je plačano","plačano","predana računovodstvu","urejeno")):
+    if any(p in text for p in ("will be paid","bo plačana","bo plačan","je plačano","plačano","predana računovodstvu","urejeno",
+                               "v prilogi pošiljam", "pošiljam račun", "poslal sem", "sent the invoice", "shared via adobe acrobat")):
         score=min(score,0.20)
     return min(score,1.0)
 
