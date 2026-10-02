@@ -28,7 +28,8 @@ const events = [
 
 const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "https://life-production-fd51.up.railway.app";
 const CONNECT_PROVIDERS = [
-  { id: "google", label: "Google", actionLabel: "Connect Google account", description: "LIFE reads Gmail and Google Calendar only. You can revoke access at any time." }
+  { id: "google", label: "Google", actionLabel: "Connect Google account", description: "LIFE reads Gmail and Google Calendar only. You can revoke access at any time." },
+  { id: "microsoft", label: "Microsoft", actionLabel: "Connect Microsoft account", description: "LIFE reads Outlook Mail and Outlook Calendar only. You can revoke access at any time." }
 ] as const;
 
 export default function LifePage() {
@@ -57,21 +58,19 @@ export default function LifePage() {
   const refreshLive=async()=>{
     if(!API_BASE) return {success:false,obligationsCount:0};
     setLoadingLive(true);
-    let obligationsOk=false, summaryOk=false, calendarOk=false, obligationsCount=0;
+    let lifeItemsOk=false, summaryOk=false, calendarOk=false, obligationsCount=0;
     try{
-      const now=new Date();
-      const d=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-      const [obligationResponse,summaryResponse,calendarResponse]=await Promise.all([
-        fetch(API_BASE+"/obligations?date="+d,{credentials:"include"}),
+      const [lifeItemsResponse,summaryResponse,calendarResponse]=await Promise.all([
+        fetch(API_BASE+"/life-items?limit=3",{credentials:"include"}),
         fetch(API_BASE+"/summaries/today",{credentials:"include"}),
         fetch(API_BASE+"/calendar/upcoming?days=14",{credentials:"include"})
       ]);
-      obligationsOk=obligationResponse.ok;
-      if(obligationResponse.ok){
-        const data=await obligationResponse.json();
+      lifeItemsOk=lifeItemsResponse.ok;
+      if(lifeItemsResponse.ok){
+        const data=await lifeItemsResponse.json();
         if(Array.isArray(data)){
           obligationsCount=data.length;
-          setItems(data.map((x:any)=>{const provider=x.provider||"google";return {id:x.id,title:x.title,summary:x.summary||"",source:x.sender||provider.charAt(0).toUpperCase()+provider.slice(1),sourceType:provider==="gmail"?"Email":provider==="calendar"?"Calendar":"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status};}));
+          setItems(data.map((x:any)=>{const category=x.category||"other"; const providerNames=(x.evidence||[]).map((e:any)=>e.provider).filter(Boolean); const source=providerNames.length?providerNames.join(" + "):"LIFE"; return {id:x.id,title:x.title,summary:x.summary||"",source,sourceType:providerNames.includes("calendar")||providerNames.includes("outlook_calendar")?"Calendar":"Email",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category,due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.next_action,status:x.status};}));
         }
       }
       summaryOk=summaryResponse.ok;
@@ -84,7 +83,7 @@ export default function LifePage() {
         const eventsData=await calendarResponse.json();
         setCalendarEvents(Array.isArray(eventsData)?eventsData:[]);
       }
-      const success=obligationsOk && summaryOk && calendarOk;
+      const success=lifeItemsOk && summaryOk && calendarOk;
       const privacyBlocked=[obligationResponse,summaryResponse,calendarResponse].some(r=>r.status===503);
       setSyncError(success ? "" : privacyBlocked ? "Google source reading is blocked until LIFE AI privacy setup is complete." : "Some Google data could not be refreshed. Try Sync now.");
       return {success,obligationsCount};
@@ -107,24 +106,29 @@ export default function LifePage() {
         const auth=await statusResponse.json();
         const health=await healthResponse.json().catch(()=>({}));
         setAiReady(health?.ai_data_usage==="not_used_for_training");
-        const connected=new URLSearchParams(window.location.search).get("connected")==="1";
+        const connectedParam=new URLSearchParams(window.location.search).get("connected");
+        const connected=connectedParam==="1" || connectedParam==="microsoft";
         if(connected){
           await Promise.allSettled([
             fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
+            fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"})
           ]);
           window.history.replaceState({},"",window.location.pathname);
         }
-        if(auth?.authenticated && auth?.google_connected){
+        if(auth?.authenticated && (auth?.google_connected || auth?.microsoft_connected)){
           setLive(true);
           setItems([]);
           setCalendarEvents([]);
           if(auth?.user?.email) setUserEmail(auth.user.email);
           if(!connected){
+            const syncCalls=[];
+            if(auth?.google_connected) syncCalls.push(fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"}));
+            if(auth?.microsoft_connected) syncCalls.push(fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}));
+            await Promise.allSettled(syncCalls);
             await Promise.allSettled([
-              fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
-              fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
-            ]);
+              ]);
           }
           const refreshed=await refreshLive();
           await telemetry("app_opened");
@@ -171,7 +175,7 @@ export default function LifePage() {
   },[items,view,query,done,showAll,live]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
-  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);const blocked=results.some(r=>r.status===503);if(blocked){throw new Error("privacy gate")}if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch(error){const message=error instanceof Error&&error.message==="privacy gate"?"Google source reading is blocked until LIFE AI privacy setup is complete.":"Google sync failed. Please retry.";setSyncError(message);notify(error instanceof Error&&error.message==="privacy gate"?"AI setup required":"Sync failed")}finally{setSyncing(false)}};
+  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const status=await api("/auth/status");const auth=await status.json();const calls=[];if(auth?.google_connected) calls.push(api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"}));if(auth?.microsoft_connected) calls.push(api("/sources/outlook-mail/sync",{method:"POST"}),api("/sources/outlook-calendar/sync",{method:"POST"}));const results=await Promise.all(calls);const blocked=results.some(r=>r.status===503);if(blocked)throw new Error("privacy gate");if(results.some(r=>!r.ok))throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch(error){const message=error instanceof Error&&error.message==="privacy gate"?"Source reading is blocked until LIFE AI privacy setup is complete.":"Source sync failed. Please retry.";setSyncError(message);notify(error instanceof Error&&error.message==="privacy gate"?"AI setup required":"Sync failed")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
   const telemetry=async(action:string,metadata:Record<string,string|number|boolean>={})=>{
     if(!API_BASE) return;
