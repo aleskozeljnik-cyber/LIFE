@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime, timezone
 from email.utils import getaddresses
 from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
@@ -128,9 +129,15 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 text = gmail_text(message)
                 headers = {h.get("name", "").lower(): h.get("value", "") for h in message.get("payload", {}).get("headers", [])}
                 title = headers.get("subject", "") or summary.get("subject", "") or "Gmail message"
+                gmail_occurred_at = None
+                if message.get("internalDate"):
+                    try:
+                        gmail_occurred_at = datetime.fromtimestamp(int(message["internalDate"]) / 1000, tz=timezone.utc)
+                    except (TypeError, ValueError, OSError):
+                        pass
                 item_id = await _persist_context_item(cur, user_id, NormalizedItem(
                     provider="gmail", item_type="message", external_id=external_id,
-                    title=title[:300], body=text, summary=message.get("snippet", ""),
+                    title=title[:300], body=text, summary=message.get("snippet", ""), occurred_at=gmail_occurred_at,
                     metadata={"gmail_message_id": external_id},
                 ))
                 addresses = getaddresses([headers.get("from",""), headers.get("to",""), headers.get("cc","")])
