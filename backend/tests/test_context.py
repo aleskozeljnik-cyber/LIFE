@@ -68,3 +68,11 @@ def test_gmail_occurred_at_falls_back_to_rfc_date():
     assert value is not None
     assert value.year == 2024
     assert value.hour == 12
+
+
+def test_normalize_name_matches_common_provider_variants():
+    assert normalize_name("  Aleš  Koželjnik. ") == "ales kozeljnik"
+
+
+def test_normalize_name_does_not_keep_punctuation_as_identity():
+    assert normalize_name("Janez-Novak") == "janez novak"
