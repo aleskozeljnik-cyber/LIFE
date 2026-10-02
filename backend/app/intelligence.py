@@ -241,7 +241,8 @@ async def get_today_life_items(user_id: str,limit: int=3) -> list[dict[str,Any]]
     await rebuild_life_items(user_id)
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("""select id,title,summary,next_action,priority,category,due_at,status,source_count,evidence,confidence
+            await cur.execute("""select id,title,summary,next_action,priority,category,due_at,status,source_count,evidence,confidence,
+                                        coalesce(evidence->0->>'action_type','review') as action_type
                                  from life_items where user_id=%s and status='open'
                                  order by case priority when 'high' then 1 when 'medium' then 2 else 3 end,
                                           case when due_at is null then 1 else 0 end,due_at asc limit %s""",(user_id,limit))
