@@ -1222,3 +1222,13 @@ Record for later, not current scope:
 - No original Gmail/Calendar/context records are deleted by this correction. Only the derived clustering behavior is changed.
 - Railway deployment for commit `6bdc37536bcf35564c3e1aeb35029729b481a54e` is currently deploying; final production validation remains pending until deployment completes and the authenticated owner Life Item rebuild is observed.
 - Quality gate: **"ŠTEVILKA RAČUN 14001" must remain a standalone real Gmail item unless actual evidence establishes a relationship to another source. It must not inherit RKGV context from generic generated text.**
+
+
+## 2026-10-02 — DECIDE signal-to-noise hardening v1
+
+- Owner-pilot validation after the 14001 clustering fix confirmed that cross-source behavior is correct: **ŠTEVILKA RAČUN 14001** is now a standalone Life Item with source_count=1, while **RKGV** remains a legitimate topic candidate from the real Calendar event.
+- A second quality issue was identified in the DECIDE layer: the previous actionability gate (0.30) allowed too many weak/open obligations to become Life Items, including low-value informational items with generic next actions.
+- Backend commit 2d7d7118512bf32ca03369c140cf759df090351b raises the Life Item creation threshold from 0.30 to 0.55 and changes the default Today/briefing retrieval limit from 8 to 3.
+- This is a derived-view quality change only. Source data, context items, people, projects and obligations are not deleted or rewritten.
+- Quality gate for this iteration: Today should surface a maximum of three meaningful items, while weak informational/noise candidates remain available in the underlying source/obligation layers rather than occupying the main LIFE briefing.
+- Next validation: deploy commit 2d7d7118512bf32ca03369c140cf759df090351b, open/refresh LIFE, inspect the resulting top three, and verify that 14001 remains standalone and that low-value messages no longer dominate the briefing.
