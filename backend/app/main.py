@@ -75,7 +75,7 @@ async def google_callback(code: str, state: str, response: Response, life_oauth_
     if not real_data_processing_allowed():
         raise HTTPException(
             status_code=503,
-            detail=f"Real-data processing blocked: AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.",
+            detail=f"Privacy gate: real-data processing blocked because AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.",
         )
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
@@ -147,7 +147,7 @@ async def microsoft_callback(code: str, state: str, response: Response, life_oau
     tokens = await microsoft_exchange_code(code)
     userinfo = await microsoft_fetch_userinfo(tokens["access_token"])
     if not real_data_processing_allowed():
-        raise HTTPException(status_code=503, detail=f"Real-data processing blocked: AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.")
+        raise HTTPException(status_code=503, detail=f"Privacy gate: real-data processing blocked because AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.")
     microsoft_sub = userinfo.get("id")
     email = (userinfo.get("mail") or userinfo.get("userPrincipalName") or "").strip().lower()
     name = userinfo.get("displayName")
