@@ -10,7 +10,7 @@ def test_calendar_upcoming_preserves_privacy_gate_status(monkeypatch):
     async def blocked(_user_id: str):
         raise HTTPException(
             status_code=503,
-            detail="Real-data processing blocked: AI data policy is unknown.",
+            detail="Privacy gate: real-data processing blocked because AI data policy is unknown.",
         )
 
     async def fail_if_calendar_called(*args, **kwargs):

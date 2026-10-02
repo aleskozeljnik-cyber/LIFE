@@ -75,7 +75,7 @@ async def google_callback(code: str, state: str, response: Response, life_oauth_
     if not real_data_processing_allowed():
         raise HTTPException(
             status_code=503,
-            detail=f"Real-data processing blocked: AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.",
+            detail=f"Privacy gate: real-data processing blocked because AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.",
         )
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
@@ -147,7 +147,7 @@ async def microsoft_callback(code: str, state: str, response: Response, life_oau
     tokens = await microsoft_exchange_code(code)
     userinfo = await microsoft_fetch_userinfo(tokens["access_token"])
     if not real_data_processing_allowed():
-        raise HTTPException(status_code=503, detail=f"Real-data processing blocked: AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.")
+        raise HTTPException(status_code=503, detail=f"Privacy gate: real-data processing blocked because AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.")
     microsoft_sub = userinfo.get("id")
     email = (userinfo.get("mail") or userinfo.get("userPrincipalName") or "").strip().lower()
     name = userinfo.get("displayName")
@@ -307,6 +307,56 @@ async def life_items(limit: int = Query(default=3, ge=1, le=20), life_session: s
     user_id = current_user(life_session)
     try:
         items = await get_today_life_items(user_id, limit=limit)
+        # Enrich only from source-backed Context Core relationships.
+        # No names/projects are inferred at API presentation time.
+        obligation_ids = [str(item.get("id")) for item in items if item.get("id")]
+        related_by_obligation = {}
+        if obligation_ids:
+            async with await get_connection() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """select
+                             ce.obligation_id,
+                             coalesce(
+                               jsonb_agg(distinct jsonb_build_object(
+                                 'id', p.id,
+                                 'name', p.display_name,
+                                 'email', p.primary_email
+                               )) filter (where p.id is not null),
+                               '[]'::jsonb
+                             ) as related_people,
+                             coalesce(
+                               jsonb_agg(distinct jsonb_build_object(
+                                 'id', pr.id,
+                                 'name', pr.name,
+                                 'kind', pr.kind
+                               )) filter (where pr.id is not null),
+                               '[]'::jsonb
+                             ) as related_projects
+                           from context_evidence ce
+                           left join context_relationships cr
+                             on cr.user_id=ce.user_id
+                            and cr.from_item_id=ce.context_item_id
+                           left join people p
+                             on p.id=cr.to_person_id
+                            and p.user_id=ce.user_id
+                           left join projects pr
+                             on pr.id=cr.project_id
+                            and pr.user_id=ce.user_id
+                           where ce.user_id=%s
+                             and ce.obligation_id = any(%s::uuid[])
+                           group by ce.obligation_id""",
+                        (user_id, obligation_ids),
+                    )
+                    for row in await cur.fetchall():
+                        related_by_obligation[str(row["obligation_id"])] = {
+                            "related_people": row["related_people"] or [],
+                            "related_projects": row["related_projects"] or [],
+                        }
+        for item in items:
+            related = related_by_obligation.get(str(item.get("id")), {})
+            item["related_people"] = related.get("related_people", [])
+            item["related_projects"] = related.get("related_projects", [])
         if response is not None:
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
             response.headers["Pragma"] = "no-cache"
