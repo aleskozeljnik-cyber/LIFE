@@ -76,3 +76,22 @@ def test_normalize_name_matches_common_provider_variants():
 
 def test_normalize_name_does_not_keep_punctuation_as_identity():
     assert normalize_name("Janez-Novak") == "janez novak"
+
+
+def test_topic_candidate_rejects_invoice_number_and_generic_token():
+    rows = [
+        {"id": "1", "provider": "gmail", "title": "ŠTEVILKA RAČUN 14001"},
+        {"id": "2", "provider": "calendar", "title": "VABILO 14001"},
+        {"id": "3", "provider": "gmail", "title": "SEJA priprava"},
+        {"id": "4", "provider": "calendar", "title": "SEJA sestanek"},
+    ]
+    assert "14001" not in candidate_topic_names(rows)
+    assert "seja" not in candidate_topic_names(rows)
+
+
+def test_topic_candidate_keeps_distinctive_shared_anchor():
+    rows = [
+        {"id": "1", "provider": "gmail", "title": "RKGV priprava"},
+        {"id": "2", "provider": "calendar", "title": "VABILO RKGV"},
+    ]
+    assert candidate_topic_names(rows) == ["rkgv"]
