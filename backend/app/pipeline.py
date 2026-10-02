@@ -98,15 +98,44 @@ async def _persist_person(cur, user_id: str, ref: PersonRef) -> str | None:
     name = normalize_name(ref.display_name)
     if not email and not name:
         return None
+
+    # Identity rule:
+    # 1. Exact normalized email is a strong identity key.
+    # 2. Name-only matching is allowed only against people that themselves have
+    #    no email. This prevents two different people with the same display name
+    #    from being silently merged.
     if email:
-        await cur.execute("select id from people where user_id=%s and normalized_email=%s limit 1", (user_id, email))
+        await cur.execute(
+            "select id from people where user_id=%s and normalized_email=%s limit 1",
+            (user_id, email),
+        )
     else:
-        await cur.execute("select id from people where user_id=%s and normalized_name=%s limit 1", (user_id, name))
+        await cur.execute(
+            "select id from people where user_id=%s and normalized_name=%s and normalized_email is null limit 1",
+            (user_id, name),
+        )
     row = await cur.fetchone()
     if row:
-        await cur.execute("update people set display_name=coalesce(%s,display_name), primary_email=coalesce(%s,primary_email), normalized_email=coalesce(%s,normalized_email), updated_at=now() where id=%s and user_id=%s", (ref.display_name,email,email,row["id"],user_id))
+        await cur.execute(
+            """update people
+               set display_name=coalesce(%s,display_name),
+                   normalized_name=coalesce(%s,normalized_name),
+                   primary_email=coalesce(%s,primary_email),
+                   normalized_email=coalesce(%s,normalized_email),
+                   phone=coalesce(%s,phone),
+                   updated_at=now()
+               where id=%s and user_id=%s""",
+            (ref.display_name,name,ref.email,email,ref.phone,row["id"],user_id),
+        )
         return row["id"]
-    await cur.execute("insert into people (user_id,display_name,normalized_name,primary_email,normalized_email,phone) values (%s,%s,%s,%s,%s,%s) returning id", (user_id,ref.display_name,name,ref.email,email,ref.phone))
+
+    await cur.execute(
+        """insert into people
+           (user_id,display_name,normalized_name,primary_email,normalized_email,phone)
+           values (%s,%s,%s,%s,%s,%s)
+           returning id""",
+        (user_id,ref.display_name,name,ref.email,email,ref.phone),
+    )
     return (await cur.fetchone())["id"]
 
 async def _persist_project(cur, user_id: str, name: str) -> str | None:
