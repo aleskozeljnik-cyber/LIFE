@@ -144,3 +144,35 @@ def test_decide_action_type_does_not_turn_generic_meeting_into_reply():
     }]
     assert _action_type(rows) == "review"
     assert _next_action(rows) == "Preglej zahtevano vsebino in uredi naslednji korak."
+
+
+def test_decide_filters_real_promotional_and_notification_noise():
+    from app.intelligence import _noise
+    assert _noise({"title": "Super prihranki za vikend - izkoristite jih!", "summary": "SPAR e-novičke", "category": "financial"})
+    assert _noise({"title": "We double your winnings!", "summary": "newsletter bet-at-home Bet now!", "category": "financial"})
+    assert _noise({"title": "Head of Market & Product Design", "summary": "LinkedIn Job Alert", "category": "work"})
+    assert _noise({"title": "Express One obvestilo o dostavi", "summary": "tracking information", "category": "work"})
+
+
+def test_decide_does_not_promote_generic_invoice_noun_without_action():
+    from app.intelligence import _actionability
+    row = {
+        "provider": "gmail",
+        "title": "ŠTEVILKA RAČUN 14001",
+        "summary": "V prilogi vam pošiljamo račun v pdf obliki.",
+        "priority": "medium",
+        "due_at": None,
+    }
+    assert _actionability(row) < 0.55
+
+
+def test_decide_keeps_explicit_action_request_actionable():
+    from app.intelligence import _actionability
+    row = {
+        "provider": "gmail",
+        "title": "Action required: LEI renewal",
+        "summary": "Please renew the LEI before the deadline.",
+        "priority": "medium",
+        "due_at": None,
+    }
+    assert _actionability(row) >= 0.55
