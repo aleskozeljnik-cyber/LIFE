@@ -64,13 +64,13 @@ export default function LifePage() {
     try{
       const now=new Date();
       const d=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-      const [lifeResponse,obligationsResponse,summaryResponse,calendarResponse]=await Promise.all([
+      const [lifeResponse,obligationsResult,summaryResponse,calendarResponse]=await Promise.all([
         fetch(API_BASE+"/life-items?limit=3",{credentials:"include"}),
         fetch(API_BASE+"/obligations?date="+d,{credentials:"include"}),
         fetch(API_BASE+"/summaries/today",{credentials:"include"}),
         fetch(API_BASE+"/calendar/upcoming?days=14",{credentials:"include"})
       ]);
-      obligationsOk=obligationsResponse.ok && lifeResponse.ok;
+      obligationsOk=obligationsResult.ok && lifeResponse.ok;
       if(lifeResponse.ok){
         const lifeData=await lifeResponse.json();
         if(Array.isArray(lifeData)){
@@ -78,8 +78,8 @@ export default function LifePage() {
           setItems(lifeData.map((x:any)=>{const provider=x.evidence?.[0]?.provider;const dueDate=x.due_at?new Date(x.due_at):null;const hoursAway=dueDate?((dueDate.getTime()-Date.now())/3600000):null;const isCalendar=provider==="calendar";const isNearCalendar=isCalendar && hoursAway!==null && hoursAway<=48;const itemView=isCalendar&&!isNearCalendar?"Calendar":(x.priority==="high"?"Needs attention":"Today");return {id:x.id,title:x.title,summary:x.summary||"",source:x.source_count>1?`${x.source_count} connected sources`:(provider==="gmail"?"Gmail":provider==="calendar"?"Google Calendar":"Google"),sourceType:x.source_count>1?"Google":(provider==="gmail"?"Email":provider==="calendar"?"Calendar":"Google"),priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:dueDate?dueDate.toLocaleString([], {dateStyle:"medium",timeStyle:"short"}):"No due date",view:itemView,reason:x.next_action||"LIFE found a connected commitment that may need your attention.",nextAction:x.next_action,status:x.status,sourceCount:x.source_count,evidence:x.evidence||[],related_people:x.related_people||[],related_projects:x.related_projects||[]};}));
           {const priorities=lifeData.filter((x:any)=>x.priority==="high").slice(0,3);setSummary(priorities.length?priorities.map((x:any)=>`${x.title} — ${x.next_action||"Odloči naslednji korak."}`).join(" · "):"Danes ni zaznane nujne obveznosti. LIFE spremlja tvoje povezane vire.");}
         }
-      } else if(obligationsResponse.ok){
-        const data=await obligationsResponse.json();
+      } else if(obligationsResult.ok){
+        const data=await obligationsResult.json();
         if(Array.isArray(data)){
           obligationsCount=data.length;
           setItems(data.map((x:any)=>{const provider=x.provider||"google";return {id:x.id,title:x.title,summary:x.summary||"",source:x.sender||provider.charAt(0).toUpperCase()+provider.slice(1),sourceType:provider==="gmail"?"Email":provider==="calendar"?"Calendar":"Google",priority:x.priority==="high"?"High":x.priority==="low"?"Low":"Medium",category:x.category||"other",due:x.due_at?new Date(x.due_at).toLocaleString():"No due date",view:x.priority==="high"?"Needs attention":"Today",reason:x.classification_reason,status:x.status};}));
