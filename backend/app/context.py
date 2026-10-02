@@ -86,3 +86,33 @@ def extract_project_hint(title: str | None) -> ProjectRef | None:
             if name:
                 return ProjectRef(name=name)
     return None
+
+
+TOPIC_STOPWORDS = {
+    "re", "fw", "fwd", "the", "and", "for", "from", "with", "your", "this",
+    "pozdravljeni", "pozdravljen", "prosim", "hvala", "sestanek", "termin",
+    "potrditev", "račun", "racun", "plačilo", "placilo", "izstavitev",
+    "pogodba", "informacija", "obvestilo", "dopis", "potrdilo", "vabilo",
+    "naročilo", "narocilo", "ponudba", "faktura", "jutri", "danes",
+}
+
+def topic_tokens(title: str | None) -> set[str]:
+    if not title:
+        return set()
+    tokens = {normalize_name(x) for x in re.findall(r"[\wÀ-ž]{4,}", title, flags=re.UNICODE)}
+    return {x for x in tokens if x and x not in TOPIC_STOPWORDS}
+
+def candidate_topic_names(rows: list[dict]) -> list[str]:
+    """Return conservative topic candidates shared across at least two providers."""
+    token_items: dict[str, set[tuple[str, str]]] = {}
+    for row in rows:
+        item_id = str(row.get("id"))
+        provider = row.get("provider") or ""
+        for token in topic_tokens(row.get("title")):
+            token_items.setdefault(token, set()).add((provider, item_id))
+    candidates = []
+    for token, refs in token_items.items():
+        providers = {provider for provider, _ in refs}
+        if len(refs) >= 2 and len(providers) >= 2:
+            candidates.append(token)
+    return sorted(candidates)
