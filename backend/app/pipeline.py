@@ -5,7 +5,7 @@ from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
 from .calendar import list_upcoming_events
-from .microsoft import list_messages as list_outlook_messages, list_events as list_outlook_events
+from .microsoft import list_messages as list_outlook_messages, list_events as list_outlook_events, list_chats as list_teams_chats, list_chat_messages as list_teams_chat_messages
 from .context import NormalizedItem, PersonRef, normalize_email, normalize_name, extract_project_hint, candidate_topic_names, candidate_topic_from_shared_person, topic_tokens, topic_anchor_tokens
 
 def _decode(data: str) -> str:
@@ -425,3 +425,82 @@ async def sync_outlook_calendar_and_extract(user_id: str, access_token: str) -> 
             topic_candidates = await _resolve_cross_source_topics(cur, user_id)
         await conn.commit()
     return {"events_found":len(events),"obligations_created":created,"events_skipped":skipped,"topic_candidates":topic_candidates}
+
+
+async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
+    chats = await list_teams_chats(access_token, limit=50)
+    created = skipped = prefilter_filtered = messages_sent_to_ai = 0
+    async with await get_connection() as conn:
+        async with conn.cursor() as cur:
+            hint = await _hint(cur, user_id)
+            user_email = await _user_email(cur, user_id)
+            for chat in chats:
+                chat_id = chat.get("id")
+                if not chat_id:
+                    continue
+                chat_messages = await list_teams_chat_messages(access_token, chat_id, limit=50)
+                chat_title = (chat.get("topic") or chat.get("chatType") or "Teams chat")[:300]
+                for message in chat_messages:
+                    external_id = message.get("id")
+                    if not external_id:
+                        continue
+                    await cur.execute("select id from obligations where user_id=%s and external_id=%s", (user_id, external_id))
+                    existing_obligation = await cur.fetchone()
+                    if existing_obligation:
+                        skipped += 1
+                    body = (message.get("body") or {}).get("content") or ""
+                    sender = ((message.get("from") or {}).get("user") or {})
+                    sender_name = sender.get("displayName") or ""
+                    text = "\n".join(x for x in [
+                        f"Teams chat: {chat_title}",
+                        f"From: {sender_name}",
+                        body,
+                    ] if x).strip()
+                    title = f"{chat_title} · {sender_name or 'Teams message'}"[:300]
+                    item_id = await _persist_context_item(cur, user_id, NormalizedItem(
+                        provider="teams", item_type="message", external_id=external_id,
+                        title=title, body=body, summary=body[:500],
+                        source_url=message.get("webUrl") or chat.get("webUrl"),
+                        occurred_at=message.get("createdDateTime"),
+                        metadata={"teams_message_id": external_id, "teams_chat_id": chat_id, "chat_title": chat_title},
+                    ))
+                    if sender_name and sender_name.lower() != (user_email or "").lower():
+                        person_id = await _persist_person(cur, user_id, PersonRef(display_name=sender_name))
+                        if person_id:
+                            await _link_item_person(cur, user_id, item_id, person_id)
+                    project = extract_project_hint(chat_title)
+                    if project:
+                        project_id = await _persist_project(cur, user_id, project.name)
+                        if project_id:
+                            await _link_item_project(cur, user_id, item_id, project_id)
+                    if existing_obligation:
+                        continue
+                    if not is_ai_candidate(text, "email"):
+                        prefilter_filtered += 1
+                        continue
+                    messages_sent_to_ai += 1
+                    if messages_sent_to_ai > 8:
+                        prefilter_filtered += 1
+                        continue
+                    extracted = await extract_obligation(text, hint, "email")
+                    await cur.execute("select id from sources where user_id=%s and provider='teams' and external_id=%s", (user_id, external_id))
+                    existing_source = await cur.fetchone()
+                    if existing_source:
+                        source_id = existing_source["id"]
+                        await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (title, source_id, user_id))
+                    else:
+                        await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'teams',%s,%s,now()) returning id", (user_id, external_id, title))
+                        source_id = (await cur.fetchone())["id"]
+                    await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='teams' and external_id=%s", (source_id, user_id, external_id))
+                    if extracted:
+                        await cur.execute(
+                            "insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id",
+                            (user_id, source_id, external_id, extracted.title, extracted.summary, extracted.due_at, extracted.amount, extracted.currency, sender_name or extracted.sender, extracted.category, extracted.priority, extracted.classification_reason, extracted.confidence),
+                        )
+                        row = await cur.fetchone()
+                        if row:
+                            await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id, row["id"], extracted.model, extracted.confidence, "extracted"))
+                            created += 1
+            topic_candidates = await _resolve_cross_source_topics(cur, user_id)
+        await conn.commit()
+    return {"chats_found": len(chats), "messages_found": sum(len(await list_teams_chat_messages(access_token, c.get("id"), limit=50)) for c in chats if c.get("id")), "obligations_created": created, "messages_skipped": skipped, "prefilter_filtered": prefilter_filtered, "messages_sent_to_ai": messages_sent_to_ai, "topic_candidates": topic_candidates}
