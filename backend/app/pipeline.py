@@ -82,6 +82,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 else:
                     await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'gmail',%s,%s,now()) returning id", (user_id,external_id,text.splitlines()[2][:300] if len(text.splitlines())>2 else "Gmail message"))
                     source_id = (await cur.fetchone())["id"]
+                await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='gmail' and external_id=%s", (source_id,user_id,external_id))
                 if extracted:
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,extracted.due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
                     row = await cur.fetchone()
@@ -120,6 +121,7 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                 else:
                     await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'calendar',%s,%s,now()) returning id", (user_id,external_id,event.get("summary","Calendar event")[:300]))
                     source_id = (await cur.fetchone())["id"]
+                await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='calendar' and external_id=%s", (source_id,user_id,external_id))
                 if extracted:
                     due_at = extracted.due_at or start_at
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
