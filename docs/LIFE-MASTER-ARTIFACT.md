@@ -866,6 +866,8 @@ Only after acceptance move to 10 users.
 
 **Decision:** LIFE is being developed as a Personal Intelligence Layer, not an inbox/task aggregator.
 
+**Validation evidence:** Before Context Core work began, production logs show successful real-account flow on 2026-10-01: Google OAuth callbacks returned 303, followed by /auth/status 200, /health 200, Gmail/Calendar sync 200, and /life-items 200. Context Core deployment activity started only on 2026-10-02 at 06:13 UTC.
+
 **Decision:** Long-term ambition is mass consumer adoption, with a strategic target of 10% of EU adults with smartphones.
 
 **Decision:** Outlook + Teams move into the first major integration phase.
@@ -985,7 +987,14 @@ Important architecture rule:
 - [ ] Add Teams adapter
 
 ### Security note
-Supabase advisor currently reports the new tables as RLS-enabled without policies, consistent with several existing LIFE tables. The current backend uses a server-side database connection rather than exposing these tables directly to the browser. Explicit per-user RLS policies remain a security-hardening task before direct Data API exposure.
+Context Core is RLS-enabled and has now been explicitly locked down at the Data API boundary:
+- anon and authenticated have no table privileges on the five Context Core tables
+- explicit deny-all RLS policies exist for anon and authenticated
+- the current LIFE backend continues to use a server-side Postgres connection
+- this is intentionally deny-by-default until LIFE's custom session identity is mapped to a database authorization identity suitable for per-user RLS
+- the next auth/data-boundary milestone must replace deny-all with tested per-user policies before any browser/Data API access is introduced
+
+This is not treated as a deferred hardening task anymore.
 
 ### Next immediate build
 **Context ingestion bridge:** take existing Gmail/Calendar normalized records and persist them as `context_items`, then derive People and Project/Topic candidates from those items without changing Today behavior.
@@ -1006,3 +1015,18 @@ The next implementation step is now the **Context Resolution Engine**:
 4. create relationships between source items
 5. attach evidence to obligations/LIFE items
 6. test cross-source linking before Outlook is introduced
+
+
+### 2026-10-02 — production validation and security correction
+
+**Production validation before Context Core:** confirmed in Railway HTTP logs that the real production account successfully completed Google OAuth and then loaded the Today data path before Context Core was introduced. Representative sequence on 2026-10-01:
+- /auth/google/callback → 303
+- /health → 200
+- /auth/status → 200
+- /sources/calendar/sync → 200
+- /sources/gmail/sync → 200
+- /life-items → 200
+
+This is the evidence baseline for the architecture work. The exact historical Railway variable-edit event for DATABASE_URL is not retained in the repository history, so the artifact records the stronger observable fact: the production process was successfully connecting to the database and serving authenticated real-account data after the correction.
+
+**Security correction:** Context Core Data API access was explicitly locked down immediately after review. anon and authenticated privileges were revoked and explicit deny-all RLS policies were added for all five Context Core tables. Per-user RLS will be enabled as part of the identity/data-boundary work before any direct browser access.
