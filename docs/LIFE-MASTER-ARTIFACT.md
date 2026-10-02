@@ -1211,3 +1211,14 @@ Record for later, not current scope:
 - One previously generated cross-source Life Item remains stale in the persisted table until authenticated `GET /life-items` rebuilds the owner-pilot view; it is not accepted as valid product behavior.
 - Next validation gate: refresh/open LIFE with the owner session, confirm the stale invoice/RKGV cluster disappears, and confirm the real RKGV topic remains connected through People → Topic → Evidence → Life Item.
 - Outlook remains deferred until this owner-pilot chain passes production validation.
+
+
+## 2026-10-02 — Cross-source clustering hardening v3 (14001 false-link fix)
+
+- Production investigation traced the visible **"ŠTEVILKA RAČUN 14001"** label to a real Gmail message; LIFE did not invent the underlying title.
+- The defect was the derived Life Item clustering: the old persisted Life Item incorrectly grouped that Gmail obligation with the Calendar event **"VABILO 7. REDNA SEJA UO RKGV"** and another invoice-related obligation.
+- Backend commit `6bdc37536bcf35564c3e1aeb35029729b481a54e` changes cross-provider clustering so generated summaries cannot by themselves create a relationship. Without shared canonical people/projects, cross-source grouping now requires at least two distinctive tokens that are present in the actual item titles.
+- The same change also restores `source_id` into the obligation query so Life Item evidence can correctly resolve the underlying provider source.
+- No original Gmail/Calendar/context records are deleted by this correction. Only the derived clustering behavior is changed.
+- Railway deployment for commit `6bdc37536bcf35564c3e1aeb35029729b481a54e` is currently deploying; final production validation remains pending until deployment completes and the authenticated owner Life Item rebuild is observed.
+- Quality gate: **"ŠTEVILKA RAČUN 14001" must remain a standalone real Gmail item unless actual evidence establishes a relationship to another source. It must not inherit RKGV context from generic generated text.**
