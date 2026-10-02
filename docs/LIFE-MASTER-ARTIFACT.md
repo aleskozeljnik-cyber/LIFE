@@ -1065,3 +1065,23 @@ Project inference is intentionally conservative at this stage. LIFE does **not**
 - The change is recorded as a new migration: `20261002090000_make_context_core_deny_policies_restrictive.sql`.
 - Existing migration history was restored rather than rewritten.
 - Supabase security advisor still reports pre-existing RLS/no-policy findings on legacy tables and two SECURITY DEFINER execution warnings; these are separate from the Context Core correction and are not silently changed here.
+
+
+## 2026-10-02 — Context Core identity-resolution validation
+
+Real owner production data was inspected after the Gmail + Calendar sync:
+- 50 context_items (47 Gmail messages + 3 Calendar events)
+- 47 canonical people
+- 102 participant relationships
+- 0 projects, because no real item contained an explicit project marker
+
+**Identity resolution is demonstrably deduplicating across multiple items.** Example:
+- Canonical person: `Ziga B` / `ziga.brodnik@gmail.com`
+- Same `people.id`: `b85f86e2-57b9-4ad8-80f7-febb6a96e52b`
+- Linked to 7 distinct context items: 1 Calendar event and 6 Gmail messages.
+
+**Cross-source identity resolution is also verified.** The same canonical `people.id` is used when a person appears as a Calendar attendee and in Gmail. The production data contains multiple such cases. The clearest example is `Ziga B / ziga.brodnik@gmail.com`: the same person row is linked to the Calendar event `VABILO 7. REDNA SEJA UO RKGV` and Gmail messages including `DOPIS PREDSEDNIKA ČLANOM UO - NUJNO!`.
+
+This is evidence of actual identity merging, not merely repeated insertion into separate source-specific person rows.
+
+**Project observation (not a task):** the current explicit-tag-only mechanism will likely produce zero projects in normal real-world use because users rarely write standardized `[Project: NAME]` / `Project: NAME` markers. This is recorded as an observation for a later product/architecture decision; it is intentionally **not** a current implementation task.
