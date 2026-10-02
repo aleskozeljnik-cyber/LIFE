@@ -151,9 +151,27 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                 if len(providers)>1: cross_source+=1
                 await cur.execute("""insert into life_items
                   (user_id,cluster_key,title,summary,next_action,priority,category,due_at,status,source_count,evidence,confidence,generated_at,updated_at)
-                  values (%s,%s,%s,%s,%s,%s,%s,%s,'open',%s,%s::jsonb,%s,now(),now())""",
+                  values (%s,%s,%s,%s,%s,%s,%s,%s,'open',%s,%s::jsonb,%s,now(),now())
+                  returning id""",
                   (user_id,cluster_key,_group_title(group),_group_summary(group),_next_action(group),priority,category,due_at,
                    len(providers),__import__("json").dumps(_evidence(group)),max((r.get("confidence") or 0 for r in group),default=0)))
+                life_item_id=(await cur.fetchone())["id"]
+                for row in group:
+                    if row.get("id") and row.get("source_id"):
+                        await cur.execute(
+                            """insert into context_evidence (user_id,context_item_id,obligation_id,life_item_id,evidence_type,source_ref)
+                               select %s,ci.id,%s,%s,'life_item_source',
+                                      jsonb_build_object('provider',ci.provider,'external_id',ci.external_id)
+                               from context_items ci
+                               where ci.user_id=%s and ci.source_id=%s
+                                 and not exists (
+                                   select 1 from context_evidence ce
+                                   where ce.user_id=%s and ce.life_item_id=%s
+                                     and ce.context_item_id=ci.id
+                                     and ce.evidence_type='life_item_source'
+                                 )""",
+                            (user_id,row["id"],life_item_id,user_id,row["source_id"],user_id,life_item_id),
+                        )
                 created+=1
         await conn.commit()
     return {"items_created":created,"cross_source_items":cross_source,"filtered_noise":filtered}
