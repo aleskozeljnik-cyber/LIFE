@@ -1370,3 +1370,43 @@ Commits:
 Production validation:
 - Railway deployment for the action-intent test commit: `4c72836b-e002-4d7f-a46c-cfe3934c178b` — SUCCESS.
 - Latest API deployment for `c3ec5e50d29d32011060a8db17ed7e7c9efd493c` is still deploying at artifact-update time; final production validation remains pending until Railway reports SUCCESS.
+
+
+## 2026-10-02 — Owner-pilot DECIDE quality pass: noise suppression v1
+
+Real owner-pilot inspection exposed a concrete product-quality issue: the evidence and cross-source clustering layers were behaving conservatively, but the Today/DECIDE layer was still admitting some informational and promotional mail because generic words such as "račun", "prosim" or "podpis" could make an obligation appear actionable.
+
+Observed real-data examples included:
+- promotional SPAR mail: "Super prihranki za vikend - izkoristite jih!"
+- gambling promotion: "We double your winnings!"
+- LinkedIn job/newsletter content
+- delivery/tracking notification
+- generic invoice notification: "ŠTEVILKA RAČUN 14001"
+- outbound/completed messages containing invoice language
+
+The DECIDE gate was hardened:
+- promotional/newsletter/job-alert/delivery/welcome/order-confirmation patterns are explicitly filtered as noise;
+- generic financial nouns such as "račun", "faktura", "invoice" and "plačilo" no longer make an item actionable by themselves;
+- explicit user-directed actions remain actionable (reply, confirm, approve, review, pay, sign, prepare, follow-up, decision, etc.);
+- outbound/completed patterns such as "v prilogi pošiljam", "pošiljam račun" and Adobe Acrobat sharing are suppressed unless stronger evidence exists.
+
+Tests added for:
+- real promotional/notification noise;
+- invoice number without an explicit action;
+- explicit LEI renewal/action-required mail remaining actionable.
+
+Commits:
+- `47957105bd4a65cdbfce2dec123db95976c99a03` — DECIDE noise/actionability hardening
+- `c3f7a088570a4d5e66d123a59f5af236271ef3c3` — quality tests
+
+Production:
+- Railway backend deployment `37c3a889-570d-46f4-8fac-993322345a4c` — SUCCESS.
+
+Quality gate for the next owner refresh:
+1. Today must not surface promotional/newsletter/delivery noise.
+2. "ŠTEVILKA RAČUN 14001" must remain standalone and not dominate Today solely because it contains "račun".
+3. Explicit action requests such as LEI renewal must remain visible.
+4. Every surfaced Life Item must retain source-backed evidence.
+
+Important product conclusion:
+**The owner pilot is now being used as an adversarial test set, not merely as a demo dataset.** Every observed false positive becomes a regression test before broader rollout.
