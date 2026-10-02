@@ -16,7 +16,7 @@ from .summary import generate_today_summary
 from .security import encrypt_token, decrypt_token
 from .telemetry import record_usage_event
 
-app = FastAPI(title="LIFE API", version="1.0.0")\n\n@app.get("/internal-validation/LIFEVAL20261002-RKGV-7f3c91")\nasync def internal_validation():\n    result = await run_user_sync("fd871b21-071f-4c00-b10f-d46988e1a4b1", None)\n    return {"status": "ok", "gmail": result.get("gmail", {}).get("topic_candidates", []), "calendar": result.get("calendar", {}).get("topic_candidates", [])}\n
+app = FastAPI(title="LIFE API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
