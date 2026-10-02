@@ -1304,3 +1304,13 @@ When tenant-approved Microsoft credentials become available:
 8. verify no duplicate/false cross-source clustering
 
 No synthetic Microsoft data is to be inserted to make this gate pass.
+
+
+## 2026-10-02 — People / identity resolution v2
+
+- Canonical person-name normalization now removes case, accents, punctuation and repeated whitespace, so common provider variants such as "Aleš Koželjnik" and "Ales Kozeljnik" normalize consistently.
+- Person persistence now treats an exact normalized email as the strong identity key.
+- Name-only matching is restricted to existing people that have no email. This prevents two different people with the same display name from being silently merged.
+- Existing People records are not deleted or merged retroactively by this change; it changes the behavior of future synchronization.
+- Tests added for accent/punctuation normalization.
+- Quality gate: identity resolution must prefer false negatives over unsafe false-positive person merges when email evidence is absent.
