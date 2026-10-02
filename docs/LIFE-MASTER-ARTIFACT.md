@@ -1252,3 +1252,55 @@ Record for later, not current scope:
 3. Run real owner OAuth → Outlook Mail sync → Outlook Calendar sync.
 4. Validate People + cross-source linking against Google data and inspect evidence.
 5. Then implement Teams as the next P1 connector.
+
+
+## 2026-10-02 — Microsoft / Teams owner-pilot foundation
+
+Microsoft Outlook integration is present in the backend but cannot yet be exercised against the owner's work account because the account belongs to a managed Microsoft tenant and LIFE does not have tenant-approved Microsoft OAuth credentials.
+
+Decision:
+- Do not block LIFE architecture on manual Entra setup.
+- Keep the Microsoft OAuth implementation ready for the point when the company tenant approves the application.
+- Do not fabricate Outlook or Teams data.
+- Use Microsoft Graph's least-privileged delegated capabilities where possible.
+
+### Teams implementation
+
+Implemented:
+- Microsoft OAuth scope extended with delegated `Chat.Read`.
+- Graph adapter can list the signed-in user's Teams 1:1/group chats.
+- Graph adapter can read messages from those chats.
+- Teams messages are normalized into provider-neutral `context_items`.
+- Teams senders are resolved into the existing People layer where a stable display identity is available.
+- Explicit project hints continue to use the existing Project/Topic mechanism.
+- Teams messages enter the existing obligation/extraction and evidence pipeline.
+- New authenticated endpoint: `POST /sources/teams/sync`.
+- LIFE UI now exposes Microsoft as a source and can initiate Microsoft OAuth when credentials are configured.
+- After Microsoft authorization, LIFE attempts Outlook Mail, Outlook Calendar and Teams sync before rebuilding the live Today view.
+
+### Permission decision
+
+Microsoft Graph documents `Chat.Read` as the least-privileged delegated permission for reading messages in the signed-in user's 1:1/group Teams chats and indicates that admin consent is not required for that delegated permission. Channel message access is different: Microsoft documents `ChannelMessage.Read.All` as the least-privileged delegated permission for channel messages, so channel ingestion remains a separate tenant-permission milestone.
+
+### Current blocker
+
+Production Railway does not yet contain:
+- `MICROSOFT_CLIENT_ID`
+- `MICROSOFT_CLIENT_SECRET`
+- `MICROSOFT_REDIRECT_URI`
+
+Therefore the Microsoft/Teams path is code-complete at the adapter/API layer but **not real-data validated**.
+
+### Next validation gate
+
+When tenant-approved Microsoft credentials become available:
+1. connect the owner's Microsoft account
+2. verify Outlook Mail sync
+3. verify Outlook Calendar sync
+4. verify Teams chat sync
+5. verify Microsoft People merge with existing Gmail/Calendar people
+6. verify cross-provider project/topic relationships
+7. verify evidence → Life Item behavior
+8. verify no duplicate/false cross-source clustering
+
+No synthetic Microsoft data is to be inserted to make this gate pass.
