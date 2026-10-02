@@ -168,6 +168,14 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                      )""",
                 (user_id,user_id),
             )
+            for link in _context_evidence_links(candidates):
+                await cur.execute(
+                    """insert into context_evidence
+                       (user_id,context_item_id,obligation_id,evidence_type,source_ref)
+                       values (%s,%s,%s,%s,%s::jsonb)
+                       on conflict do nothing""",
+                    (user_id,link["context_item_id"],link["obligation_id"],link["evidence_type"],__import__("json").dumps(link["source_ref"])),
+                )
             created=cross_source=filtered=0
             for group in groups:
                 action=max((_actionability(r) for r in group),default=0)
@@ -194,14 +202,6 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                   (user_id,cluster_key,_group_title(group),_group_summary(group),_next_action(group),priority,category,due_at,
                    len(providers),__import__("json").dumps(_evidence(group)),max((r.get("confidence") or 0 for r in group),default=0)))
                 life_item_id=(await cur.fetchone())["id"]
-                for link in _context_evidence_links(group):
-                    await cur.execute(
-                        """insert into context_evidence
-                           (user_id,context_item_id,obligation_id,evidence_type,source_ref)
-                           values (%s,%s,%s,%s,%s::jsonb)
-                           on conflict do nothing""",
-                        (user_id,link["context_item_id"],link["obligation_id"],link["evidence_type"],__import__("json").dumps(link["source_ref"])),
-                    )
                 for link in _context_evidence_links(group, str(life_item_id)):
                     await cur.execute(
                         """insert into context_evidence
