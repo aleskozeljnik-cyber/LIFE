@@ -1336,3 +1336,37 @@ No synthetic Microsoft data is to be inserted to make this gate pass.
 - Added a test for the exact source-backed evidence shape.
 - No synthetic evidence is created; evidence is derived from real obligation/source records.
 - Quality gate: every surfaced Life Item must be traceable to an underlying source, and cross-source relationships must not be inferred from the generated summary itself.
+
+
+## 2026-10-02 — DECIDE v2: evidence-driven next action
+
+Implemented:
+- DECIDE now derives an explicit action intent from the actual source-backed obligation/context wording:
+  - reply
+  - confirm
+  - pay
+  - sign
+  - prepare
+  - review
+  - follow_up
+  - decide
+- Explicit source intent takes precedence over generic Calendar wording. A meeting does not automatically become a generic "prepare meeting" task when the underlying source contains a concrete reply/confirmation/payment request.
+- Life Item evidence now carries the derived action type alongside the provider/source evidence.
+- The `/life-items` response exposes `action_type` so the frontend can use the same semantic action without re-inferring it.
+- Generic fallback remains conservative and evidence-based; LIFE does not invent specific numbers, documents, decisions or people that are absent from source evidence.
+- Added tests covering explicit reply intent and generic meeting behavior.
+
+Quality gate:
+- A surfaced Life Item must still have source-backed evidence.
+- Cross-source grouping must still pass the existing strong clustering rules.
+- Next-action wording must follow the strongest explicit intent found in real source evidence.
+- The 14001/RKGV false-link protection remains unchanged.
+
+Commits:
+- `7bc20c16a6ae0084b1a35650f28fb31cb5d64844` — evidence-driven DECIDE action logic
+- `2bd74d625d020fa37b27a551be45c4c3406a9900` — DECIDE action-intent tests
+- `c3ec5e50d29d32011060a8db17ed7e7c9efd493c` — expose `action_type` via Life Items API
+
+Production validation:
+- Railway deployment for the action-intent test commit: `4c72836b-e002-4d7f-a46c-cfe3934c178b` — SUCCESS.
+- Latest API deployment for `c3ec5e50d29d32011060a8db17ed7e7c9efd493c` is still deploying at artifact-update time; final production validation remains pending until Railway reports SUCCESS.
