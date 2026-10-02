@@ -94,6 +94,7 @@ TOPIC_STOPWORDS = {
     "potrditev", "račun", "racun", "plačilo", "placilo", "izstavitev",
     "pogodba", "informacija", "obvestilo", "dopis", "potrdilo", "vabilo",
     "naročilo", "narocilo", "ponudba", "faktura", "jutri", "danes",
+    "redna", "redni", "seja", "seje", "uo", "vabilo",
 }
 
 def topic_tokens(title: str | None) -> set[str]:
