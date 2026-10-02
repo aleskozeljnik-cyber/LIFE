@@ -64,7 +64,13 @@ def normalize_email(value: str | None) -> str | None:
 def normalize_name(value: str | None) -> str | None:
     if not value:
         return None
-    return " ".join(value.strip().lower().split())
+    # Keep the canonical name human-readable while making common provider
+    # variations (case, accents, punctuation and repeated whitespace) match.
+    import unicodedata
+    value = unicodedata.normalize("NFKD", value.strip().lower())
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = re.sub(r"[^a-z0-9\\s]+", " ", value)
+    return " ".join(value.split())
 
 
 def item_key(item: NormalizedItem) -> tuple[str, str | None]:
