@@ -40,7 +40,8 @@ async def _persist_context_item(cur, user_id: str, item: NormalizedItem) -> str:
         on conflict (user_id,provider,external_id) do update set
           title=excluded.title, body=excluded.body, summary=excluded.summary,
           source_url=excluded.source_url, occurred_at=excluded.occurred_at,
-          metadata=excluded.metadata, updated_at=now()""",
+          metadata=excluded.metadata, updated_at=now()
+        returning id""",
         (user_id, item.metadata.get("source_id") if item.metadata else None, item.external_id,
          item.item_type, item.provider, item.account_key, item.title, item.body, item.summary,
          item.source_url, item.occurred_at,
