@@ -1200,3 +1200,14 @@ Record for later, not current scope:
 - Next build: strengthen cross-source clustering so provider linkage requires meaningful shared context (canonical person, project/topic evidence, or distinctive temporal/context overlap) rather than weak token coincidence.
 - After that correction, re-run the owner-pilot path end-to-end: People → Topic/Project → Evidence → Life Item → next action.
 - Outlook remains deferred until this owner-pilot Context Resolution path is reliable.
+
+
+## 2026-10-02 — Cross-source clustering hardening v2
+
+- Backend commit `4a8af134abf386f09f1d93f76d8edeedac3458fb` deployed successfully.
+- Cross-source Life Item clustering now requires real contextual evidence: shared canonical person, shared project, or sufficiently strong multi-token content overlap. Weak single-token coincidence no longer creates a cross-provider cluster.
+- Production context/source linkage was repaired for existing records; 59 owner-pilot context items now have source linkage where a corresponding source exists.
+- Evidence layer after backfill: 59 `context_source`, 20 `life_item_source`, 1 `project_link` records.
+- One previously generated cross-source Life Item remains stale in the persisted table until authenticated `GET /life-items` rebuilds the owner-pilot view; it is not accepted as valid product behavior.
+- Next validation gate: refresh/open LIFE with the owner session, confirm the stale invoice/RKGV cluster disappears, and confirm the real RKGV topic remains connected through People → Topic → Evidence → Life Item.
+- Outlook remains deferred until this owner-pilot chain passes production validation.
