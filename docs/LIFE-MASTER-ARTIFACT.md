@@ -1131,3 +1131,26 @@ Decision:
 - Keep the v2.1 resolver in code but require real execution evidence before declaring topic resolution successful.
 - Next validation should invoke the authenticated sync path using the real owner session or a dedicated secure internal execution mechanism, then verify a concrete topic such as RKGV and its linked Gmail/Calendar evidence.
 - Do not add Outlook until this owner-pilot Context Resolution path is verified end-to-end.
+
+
+## 2026-10-02 — Gmail timestamp fix deployed; awaiting real sync validation
+
+Investigation clarified that the previous 0/53 occurred_at result was produced by a real sync that ran before the timestamp fix was deployed. The current backend now has explicit Gmail timestamp extraction:
+- prefer Gmail internalDate
+- fallback to RFC Date header
+- isolated helper gmail_occurred_at_from_payload(...)
+- automated tests cover both paths
+
+Deployment:
+- commit 267a340ce799a649cbe747b925e27d56305abd79 — explicit/testable timestamp extraction
+- commit 27820cf14eb5fae4aea8f6f3afc6ff67c230210c — timestamp tests
+- Railway deployment bb0f0c4e-8c7f-4df5-9caa-fd3a201b3d4b — SUCCESS
+
+The fix is not yet considered production-validated. The next validation must use the real authenticated owner sync after deployment and verify that Gmail occurred_at is populated in production. No topic/project validation is claimed before that evidence exists.
+
+### T1b follow-up — sync latency
+
+Record for later, not current scope:
+- recent Gmail sync requests observed at approximately 23–69 seconds
+- one request ended with HTTP 499 after the browser/client closed the request
+- target before T1b: validate real sync latency against the MVP requirement of <2 minutes and investigate client cancellation behavior if it recurs
