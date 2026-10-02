@@ -1085,3 +1085,26 @@ Real owner production data was inspected after the Gmail + Calendar sync:
 This is evidence of actual identity merging, not merely repeated insertion into separate source-specific person rows.
 
 **Project observation (not a task):** the current explicit-tag-only mechanism will likely produce zero projects in normal real-world use because users rarely write standardized `[Project: NAME]` / `Project: NAME` markers. This is recorded as an observation for a later product/architecture decision; it is intentionally **not** a current implementation task.
+
+
+## 2026-10-02 — Context Resolution Engine real-data validation
+
+A one-off production sync was executed for the owner account using the current Gmail + Calendar pipeline. The temporary startup hook was reverted immediately after the sync and the normal backend deployment was verified successful.
+
+Observed production state after sync:
+- 56 context_items total
+- 53 Gmail messages
+- 3 Calendar events
+- 51 canonical people
+- 108 context_relationships
+- 0 projects/topics created by the conservative cross-source title-token resolver
+
+The identity layer continues to demonstrate real cross-source resolution. Earlier validation found 12 people linked from both Calendar and Gmail, including Ziga B / ziga.brodnik@gmail.com with one Calendar event and six Gmail messages linked to the same canonical person row.
+
+The topic candidate experiment exposed an important limitation: requiring literal title-token overlap across two providers is too conservative for real personal data. The current Calendar titles were "Neven rd", "VABILO 7. REDNA SEJA UO RKGV", and "sestanek - Gašper Škarja"; the Gmail corpus did not provide sufficient literal cross-provider title-token overlap, so the resolver correctly produced zero candidates rather than inventing a topic.
+
+Decision:
+- Keep the conservative resolver as a safety baseline.
+- Do not add Outlook yet.
+- Next Context Resolution step should combine stronger deterministic evidence: shared canonical people, temporal proximity, participant overlap, reply/thread relationships, and distinctive multi-word terms.
+- Topic/project creation must remain explainable and evidence-backed; no speculative AI-generated projects.
