@@ -4,7 +4,7 @@ from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
 from .calendar import list_upcoming_events
-from .context import NormalizedItem, PersonRef, normalize_email, normalize_name, extract_project_hint
+from .context import NormalizedItem, PersonRef, normalize_email, normalize_name, extract_project_hint, candidate_topic_names, topic_tokens
 
 def _decode(data: str) -> str:
     try:
@@ -85,6 +85,19 @@ async def _link_item_person(cur, user_id: str, item_id: str, person_id: str) -> 
 async def _link_item_project(cur, user_id: str, item_id: str, project_id: str) -> None:
     await cur.execute("insert into context_relationships (user_id,from_item_id,project_id,relationship_type,confidence,evidence) select %s,%s,%s,'project',1.0,'{}'::jsonb where not exists (select 1 from context_relationships where user_id=%s and from_item_id=%s and project_id=%s and relationship_type='project')", (user_id,item_id,project_id,user_id,item_id,project_id))
 
+
+async def _resolve_cross_source_topics(cur, user_id: str) -> list[str]:
+    await cur.execute("select id, provider, title from context_items where user_id=%s and title is not null", (user_id,))
+    rows = await cur.fetchall()
+    names = candidate_topic_names(rows)
+    for name in names:
+        await cur.execute("insert into projects (user_id,name,normalized_name,kind,status) values (%s,%s,%s,'topic','candidate') on conflict (user_id,normalized_name) do update set updated_at=now() returning id", (user_id,name.upper(),name))
+        project_id = (await cur.fetchone())["id"]
+        for row in rows:
+            if name in topic_tokens(row.get("title")):
+                await _link_item_project(cur, user_id, row["id"], project_id)
+    return names
+
 async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
     messages = await list_recent_messages(access_token, days=7, max_results=100)
     created = skipped = prefilter_filtered = messages_sent_to_ai = 0
@@ -145,8 +158,9 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     if row:
                         await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
+        topic_candidates = await _resolve_cross_source_topics(cur, user_id)
         await conn.commit()
-    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered,"messages_sent_to_ai":messages_sent_to_ai}
+    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered,"messages_sent_to_ai":messages_sent_to_ai,"topic_candidates":topic_candidates}
 
 async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
     events = await list_upcoming_events(access_token, days=14)
@@ -201,5 +215,6 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                     if row:
                         await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
+        topic_candidates = await _resolve_cross_source_topics(cur, user_id)
         await conn.commit()
-    return {"events_found":len(events),"obligations_created":created,"events_skipped":skipped}
+    return {"events_found":len(events),"obligations_created":created,"events_skipped":skipped,"topic_candidates":topic_candidates}
