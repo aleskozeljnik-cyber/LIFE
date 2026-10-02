@@ -458,7 +458,7 @@ async def sync_outlook_calendar_and_extract(user_id: str, access_token: str) -> 
 
 async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
     chats = await list_teams_chats(access_token, limit=50)
-    created = skipped = prefilter_filtered = messages_sent_to_ai = 0
+    created = skipped = prefilter_filtered = messages_sent_to_ai = messages_found = 0
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             hint = await _hint(cur, user_id)
@@ -481,9 +481,16 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                     body = (message.get("body") or {}).get("content") or ""
                     sender = ((message.get("from") or {}).get("user") or {})
                     sender_name = sender.get("displayName") or ""
+                    sender_email = sender.get("email") or sender.get("mail") or ""
+                    occurred_at = message.get("createdDateTime")
+                    if isinstance(occurred_at, str):
+                        try:
+                            occurred_at = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+                        except ValueError:
+                            occurred_at = None
                     text = "\n".join(x for x in [
                         f"Teams chat: {chat_title}",
-                        f"From: {sender_name}",
+                        f"From: {sender_name}{(' <' + sender_email + '>') if sender_email else ''}",
                         body,
                     ] if x).strip()
                     title = f"{chat_title} · {sender_name or 'Teams message'}"[:300]
@@ -491,11 +498,11 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                         provider="teams", item_type="message", external_id=external_id,
                         title=title, body=body, summary=body[:500],
                         source_url=message.get("webUrl") or chat.get("webUrl"),
-                        occurred_at=message.get("createdDateTime"),
+                        occurred_at=occurred_at,
                         metadata={"teams_message_id": external_id, "teams_chat_id": chat_id, "chat_title": chat_title},
                     ))
                     if sender_name and sender_name.lower() != (user_email or "").lower():
-                        person_id = await _persist_person(cur, user_id, PersonRef(display_name=sender_name))
+                        person_id = await _persist_person(cur, user_id, PersonRef(display_name=sender_name, email=sender_email or None))
                         if person_id:
                             await _link_item_person(cur, user_id, item_id, person_id)
                     project = extract_project_hint(chat_title)
