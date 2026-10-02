@@ -70,7 +70,21 @@ async def _persist_context_item(cur, user_id: str, item: NormalizedItem) -> str:
          __import__("json").dumps(item.metadata or {})),
     )
     row = await cur.fetchone()
-    return row["id"]
+    item_id = row["id"]
+    await cur.execute(
+        """insert into context_evidence (user_id,context_item_id,evidence_type,source_ref)
+           select %s,%s,'context_source',%s::jsonb
+           where not exists (
+             select 1 from context_evidence
+             where user_id=%s and context_item_id=%s and evidence_type='context_source'
+           )""",
+        (user_id, item_id, __import__("json").dumps({
+            "provider": item.provider,
+            "external_id": item.external_id,
+            "item_type": item.item_type,
+        }), user_id, item_id),
+    )
+    return item_id
 
 
 async def _user_email(cur, user_id: str) -> str | None:
@@ -106,6 +120,18 @@ async def _link_item_person(cur, user_id: str, item_id: str, person_id: str) -> 
 
 async def _link_item_project(cur, user_id: str, item_id: str, project_id: str) -> None:
     await cur.execute("insert into context_relationships (user_id,from_item_id,project_id,relationship_type,confidence,evidence) select %s,%s,%s,'project',1.0,'{}'::jsonb where not exists (select 1 from context_relationships where user_id=%s and from_item_id=%s and project_id=%s and relationship_type='project')", (user_id,item_id,project_id,user_id,item_id,project_id))
+    await cur.execute(
+        """insert into context_evidence (user_id,context_item_id,evidence_type,source_ref)
+           select %s,%s,'project_link',jsonb_build_object('project_id',%s,'project_name',p.name)
+           from projects p
+           where p.id=%s
+             and not exists (
+               select 1 from context_evidence
+               where user_id=%s and context_item_id=%s and evidence_type='project_link'
+                 and source_ref->>'project_id'=%s
+             )""",
+        (user_id,item_id,project_id,project_id,user_id,item_id,project_id),
+    )
 
 
 async def _resolve_cross_source_topics(cur, user_id: str) -> list[str]:
