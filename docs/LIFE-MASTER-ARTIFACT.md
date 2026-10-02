@@ -930,3 +930,62 @@ and instead ask:
 > **"What do I need to do?"**
 
 LIFE should answer that question with context, evidence and the smallest useful next step.
+
+
+---
+
+# 24. PROGRESS UPDATE — CONTEXT CORE
+
+### 2026-10-02
+
+**Milestone started:** Context Core
+
+Implemented in Supabase:
+- `context_items` — provider-neutral normalized source items
+- `people` — canonical people identity layer
+- `projects` — project/topic layer
+- `context_relationships` — relationships between items, people and projects
+- `context_evidence` — provenance/evidence bridge to context, obligations and LIFE items
+
+Implemented in backend:
+- `backend/app/context.py`
+- `NormalizedItem`
+- `PersonRef`
+- `ProjectRef`
+- `ProviderAdapter` connector contract
+- provider-neutral email/name normalization
+- stable provider + external-id item identity key
+
+Tests added:
+- normalization tests
+- provider-neutral duplicate identity test
+
+Migration:
+- `supabase/migrations/20261002080000_add_context_core.sql`
+
+Important architecture rule:
+- Context Core is additive and backward-compatible.
+- Existing `obligation → life_item` flow remains intact while the new context graph is introduced.
+- No Microsoft connector is added until the normalized context contract is established.
+
+### Current Context Core status
+- [x] Item abstraction
+- [x] Person entity schema
+- [x] Project/Topic entity schema
+- [x] Relationship schema
+- [x] Evidence schema
+- [x] Provider adapter contract
+- [x] Basic normalization tests
+- [ ] Persist Gmail/Calendar items into `context_items`
+- [ ] Resolve People from real source participants
+- [ ] Resolve Projects/Topics from real items
+- [ ] Build cross-source relationship engine
+- [ ] Migrate existing obligations to reference context evidence
+- [ ] Add Outlook adapter
+- [ ] Add Teams adapter
+
+### Security note
+Supabase advisor currently reports the new tables as RLS-enabled without policies, consistent with several existing LIFE tables. The current backend uses a server-side database connection rather than exposing these tables directly to the browser. Explicit per-user RLS policies remain a security-hardening task before direct Data API exposure.
+
+### Next immediate build
+**Context ingestion bridge:** take existing Gmail/Calendar normalized records and persist them as `context_items`, then derive People and Project/Topic candidates from those items without changing Today behavior.
