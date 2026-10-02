@@ -3,6 +3,7 @@ from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
 from .calendar import list_upcoming_events
+from .context import NormalizedItem
 
 def _decode(data: str) -> str:
     try:
@@ -29,6 +30,22 @@ async def _hint(cur, user_id: str) -> str:
     rows = await cur.fetchall()
     return "; ".join(f"{r['field_name']}={r['new_value']}" for r in rows)
 
+
+async def _persist_context_item(cur, user_id: str, item: NormalizedItem) -> None:
+    await cur.execute(
+        """insert into context_items
+        (user_id,source_id,external_id,item_type,provider,account_key,title,body,summary,source_url,occurred_at,metadata)
+        values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+        on conflict (user_id,provider,external_id) do update set
+          title=excluded.title, body=excluded.body, summary=excluded.summary,
+          source_url=excluded.source_url, occurred_at=excluded.occurred_at,
+          metadata=excluded.metadata, updated_at=now()""",
+        (user_id, item.metadata.get("source_id") if item.metadata else None, item.external_id,
+         item.item_type, item.provider, item.account_key, item.title, item.body, item.summary,
+         item.source_url, item.occurred_at,
+         __import__("json").dumps(item.metadata or {})),
+    )
+
 async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
     messages = await list_recent_messages(access_token, days=7, max_results=100)
     created = skipped = prefilter_filtered = messages_sent_to_ai = 0
@@ -44,6 +61,13 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 existing_source = await cur.fetchone()
                 message = await get_message(access_token, external_id)
                 text = gmail_text(message)
+                headers = {h.get("name", "").lower(): h.get("value", "") for h in message.get("payload", {}).get("headers", [])}
+                title = headers.get("subject", "") or summary.get("subject", "") or "Gmail message"
+                await _persist_context_item(cur, user_id, NormalizedItem(
+                    provider="gmail", item_type="message", external_id=external_id,
+                    title=title[:300], body=text, summary=message.get("snippet", ""),
+                    metadata={"gmail_message_id": external_id},
+                ))
                 if not is_ai_candidate(text, "email"):
                     prefilter_filtered += 1
                     continue
@@ -83,6 +107,12 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                 start = event.get("start", {})
                 start_at = start.get("dateTime") or start.get("date")
                 text = "\n".join(x for x in [f"Event: {event.get('summary','')}",f"Description: {event.get('description','')}",f"Start: {start_at}",f"Location: {event.get('location','')}"] if x)
+                await _persist_context_item(cur, user_id, NormalizedItem(
+                    provider="calendar", item_type="calendar_event", external_id=external_id,
+                    title=(event.get("summary") or "Calendar event")[:300], body=event.get("description", ""),
+                    summary=event.get("summary", ""), occurred_at=start_at,
+                    metadata={"calendar_event_id": external_id, "location": event.get("location", "")},
+                ))
                 extracted = await extract_obligation(text, hint, "calendar")
                 if existing_source:
                     source_id = existing_source["id"]
