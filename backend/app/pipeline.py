@@ -1,9 +1,10 @@
 import base64
+from email.utils import getaddresses
 from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
 from .calendar import list_upcoming_events
-from .context import NormalizedItem
+from .context import NormalizedItem, PersonRef, normalize_email, normalize_name, extract_project_hint
 
 def _decode(data: str) -> str:
     try:
@@ -31,7 +32,7 @@ async def _hint(cur, user_id: str) -> str:
     return "; ".join(f"{r['field_name']}={r['new_value']}" for r in rows)
 
 
-async def _persist_context_item(cur, user_id: str, item: NormalizedItem) -> None:
+async def _persist_context_item(cur, user_id: str, item: NormalizedItem) -> str:
     await cur.execute(
         """insert into context_items
         (user_id,source_id,external_id,item_type,provider,account_key,title,body,summary,source_url,occurred_at,metadata)
@@ -45,6 +46,43 @@ async def _persist_context_item(cur, user_id: str, item: NormalizedItem) -> None
          item.source_url, item.occurred_at,
          __import__("json").dumps(item.metadata or {})),
     )
+    row = await cur.fetchone()
+    return row["id"]
+
+
+async def _user_email(cur, user_id: str) -> str | None:
+    await cur.execute("select email from users where id=%s", (user_id,))
+    row = await cur.fetchone()
+    return normalize_email(row["email"]) if row else None
+
+async def _persist_person(cur, user_id: str, ref: PersonRef) -> str | None:
+    email = normalize_email(ref.email)
+    name = normalize_name(ref.display_name)
+    if not email and not name:
+        return None
+    if email:
+        await cur.execute("select id from people where user_id=%s and normalized_email=%s limit 1", (user_id, email))
+    else:
+        await cur.execute("select id from people where user_id=%s and normalized_name=%s limit 1", (user_id, name))
+    row = await cur.fetchone()
+    if row:
+        await cur.execute("update people set display_name=coalesce(%s,display_name), primary_email=coalesce(%s,primary_email), normalized_email=coalesce(%s,normalized_email), updated_at=now() where id=%s and user_id=%s", (ref.display_name,email,email,row["id"],user_id))
+        return row["id"]
+    await cur.execute("insert into people (user_id,display_name,normalized_name,primary_email,normalized_email,phone) values (%s,%s,%s,%s,%s,%s) returning id", (user_id,ref.display_name,name,ref.email,email,ref.phone))
+    return (await cur.fetchone())["id"]
+
+async def _persist_project(cur, user_id: str, name: str) -> str | None:
+    normalized = normalize_name(name)
+    if not normalized:
+        return None
+    await cur.execute("insert into projects (user_id,name,normalized_name) values (%s,%s,%s) on conflict (user_id,normalized_name) do update set name=excluded.name, updated_at=now() returning id", (user_id,name.strip(),normalized))
+    return (await cur.fetchone())["id"]
+
+async def _link_item_person(cur, user_id: str, item_id: str, person_id: str) -> None:
+    await cur.execute("insert into context_relationships (user_id,from_item_id,to_person_id,relationship_type,confidence,evidence) select %s,%s,%s,'participant',1.0,'{}'::jsonb where not exists (select 1 from context_relationships where user_id=%s and from_item_id=%s and to_person_id=%s and relationship_type='participant')", (user_id,item_id,person_id,user_id,item_id,person_id))
+
+async def _link_item_project(cur, user_id: str, item_id: str, project_id: str) -> None:
+    await cur.execute("insert into context_relationships (user_id,from_item_id,project_id,relationship_type,confidence,evidence) select %s,%s,%s,'project',1.0,'{}'::jsonb where not exists (select 1 from context_relationships where user_id=%s and from_item_id=%s and project_id=%s and relationship_type='project')", (user_id,item_id,project_id,user_id,item_id,project_id))
 
 async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
     messages = await list_recent_messages(access_token, days=7, max_results=100)
@@ -52,6 +90,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             hint = await _hint(cur, user_id)
+            user_email = await _user_email(cur, user_id)
             for summary in messages:
                 external_id = summary.get("id")
                 if not external_id: continue
@@ -64,11 +103,24 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 text = gmail_text(message)
                 headers = {h.get("name", "").lower(): h.get("value", "") for h in message.get("payload", {}).get("headers", [])}
                 title = headers.get("subject", "") or summary.get("subject", "") or "Gmail message"
-                await _persist_context_item(cur, user_id, NormalizedItem(
+                item_id = await _persist_context_item(cur, user_id, NormalizedItem(
                     provider="gmail", item_type="message", external_id=external_id,
                     title=title[:300], body=text, summary=message.get("snippet", ""),
                     metadata={"gmail_message_id": external_id},
                 ))
+                addresses = getaddresses([headers.get("from",""), headers.get("to",""), headers.get("cc","")])
+                for display_name, email in addresses:
+                    email = normalize_email(email)
+                    if not email or email == user_email:
+                        continue
+                    person_id = await _persist_person(cur, user_id, PersonRef(display_name=display_name or None, email=email))
+                    if person_id:
+                        await _link_item_person(cur, user_id, item_id, person_id)
+                project = extract_project_hint(title)
+                if project:
+                    project_id = await _persist_project(cur, user_id, project.name)
+                    if project_id:
+                        await _link_item_project(cur, user_id, item_id, project_id)
                 if existing_obligation:
                     continue
                 if not is_ai_candidate(text, "email"):
@@ -101,6 +153,7 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             hint = await _hint(cur, user_id)
+            user_email = await _user_email(cur, user_id)
             for event in events:
                 external_id = event.get("id")
                 if not external_id: continue
@@ -112,12 +165,24 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                 start = event.get("start", {})
                 start_at = start.get("dateTime") or start.get("date")
                 text = "\n".join(x for x in [f"Event: {event.get('summary','')}",f"Description: {event.get('description','')}",f"Start: {start_at}",f"Location: {event.get('location','')}"] if x)
-                await _persist_context_item(cur, user_id, NormalizedItem(
+                item_id = await _persist_context_item(cur, user_id, NormalizedItem(
                     provider="calendar", item_type="calendar_event", external_id=external_id,
                     title=(event.get("summary") or "Calendar event")[:300], body=event.get("description", ""),
                     summary=event.get("summary", ""), occurred_at=start_at,
                     metadata={"calendar_event_id": external_id, "location": event.get("location", "")},
                 ))
+                for attendee in event.get("attendees", []) or []:
+                    email = normalize_email(attendee.get("email"))
+                    if not email or email == user_email:
+                        continue
+                    person_id = await _persist_person(cur, user_id, PersonRef(display_name=attendee.get("displayName"), email=email))
+                    if person_id:
+                        await _link_item_person(cur, user_id, item_id, person_id)
+                project = extract_project_hint(event.get("summary"))
+                if project:
+                    project_id = await _persist_project(cur, user_id, project.name)
+                    if project_id:
+                        await _link_item_project(cur, user_id, item_id, project_id)
                 if existing_obligation:
                     continue
                 extracted = await extract_obligation(text, hint, "calendar")
