@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from .ai import ai_data_usage_status, real_data_processing_allowed
 from .google import refresh_access_token
 from .microsoft import refresh_access_token as microsoft_refresh_access_token
-from .pipeline import sync_gmail_and_extract, sync_calendar_and_extract, sync_outlook_mail_and_extract, sync_outlook_calendar_and_extract
+from .pipeline import sync_gmail_and_extract, sync_calendar_and_extract, sync_outlook_mail_and_extract, sync_outlook_calendar_and_extract, sync_teams_and_extract
 from .security import decrypt_token, encrypt_token
 from .telemetry import record_usage_event, safe_sync_metadata
 
@@ -48,10 +48,11 @@ async def get_microsoft_access_token(user_id: str) -> str:
 async def run_user_sync(user_id: str, provider: str | None = None) -> dict:
     try:
         result = {}
-        if provider in ("outlook_mail", "outlook_calendar"):
+        if provider in ("outlook_mail", "outlook_calendar", "teams"):
             access_token = await get_microsoft_access_token(user_id)
             if provider == "outlook_mail": result["outlook_mail"] = await sync_outlook_mail_and_extract(user_id, access_token)
             if provider == "outlook_calendar": result["outlook_calendar"] = await sync_outlook_calendar_and_extract(user_id, access_token)
+            if provider == "teams": result["teams"] = await sync_teams_and_extract(user_id, access_token)
         else:
             access_token = await get_google_access_token(user_id)
             if provider in (None, "gmail"): result["gmail"] = await sync_gmail_and_extract(user_id, access_token)
