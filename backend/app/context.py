@@ -133,7 +133,11 @@ def topic_anchor_tokens(title: str | None) -> set[str]:
 
 
 def candidate_topic_from_shared_person(rows: list[dict]) -> list[str]:
-    """Find conservative topic anchors when Gmail and Calendar share a person and time window."""
+    """Find conservative topic anchors from shared canonical people.
+
+    Prefer a 14-day window when timestamps exist; if Gmail timestamps are unavailable,
+    require the same person across Gmail and Calendar and a strong Calendar anchor.
+    """
     from datetime import timedelta, timezone
 
     by_person: dict[str, list[dict]] = {}
@@ -143,23 +147,42 @@ def candidate_topic_from_shared_person(rows: list[dict]) -> list[str]:
 
     candidates: set[str] = set()
     for person_rows in by_person.values():
-        gmail = [r for r in person_rows if r.get("provider") == "gmail" and r.get("occurred_at")]
-        calendar = [r for r in person_rows if r.get("provider") == "calendar" and r.get("occurred_at")]
-        for g in gmail:
-            for event in calendar:
-                try:
-                    gt = g["occurred_at"]
-                    ct = event["occurred_at"]
-                    if isinstance(gt, str):
-                        gt = datetime.fromisoformat(gt.replace("Z", "+00:00"))
-                    if isinstance(ct, str):
-                        ct = datetime.fromisoformat(ct.replace("Z", "+00:00"))
-                    if gt.tzinfo is None:
-                        gt = gt.replace(tzinfo=timezone.utc)
-                    if ct.tzinfo is None:
-                        ct = ct.replace(tzinfo=timezone.utc)
-                except (TypeError, ValueError):
-                    continue
-                if abs(gt - ct) <= timedelta(days=14):
-                    candidates.update(topic_anchor_tokens(event.get("title")))
+        gmail = [r for r in person_rows if r.get("provider") == "gmail"]
+        calendar = [r for r in person_rows if r.get("provider") == "calendar"]
+        if not gmail or not calendar:
+            continue
+
+        for event in calendar:
+            anchors = topic_anchor_tokens(event.get("title"))
+            if not anchors:
+                continue
+
+            event_time = event.get("occurred_at")
+            matched_by_time = False
+            if event_time:
+                for g in gmail:
+                    gmail_time = g.get("occurred_at")
+                    if not gmail_time:
+                        continue
+                    try:
+                        gt = gmail_time
+                        ct = event_time
+                        if isinstance(gt, str):
+                            gt = datetime.fromisoformat(gt.replace("Z", "+00:00"))
+                        if isinstance(ct, str):
+                            ct = datetime.fromisoformat(ct.replace("Z", "+00:00"))
+                        if gt.tzinfo is None:
+                            gt = gt.replace(tzinfo=timezone.utc)
+                        if ct.tzinfo is None:
+                            ct = ct.replace(tzinfo=timezone.utc)
+                    except (TypeError, ValueError):
+                        continue
+                    if abs(gt - ct) <= timedelta(days=14):
+                        matched_by_time = True
+                        break
+
+            # Without Gmail timestamps, only strong Calendar anchors may pass.
+            if matched_by_time or not any(g.get("occurred_at") for g in gmail):
+                candidates.update(anchors)
+
     return sorted(candidates)
