@@ -1326,3 +1326,13 @@ No synthetic Microsoft data is to be inserted to make this gate pass.
 - Added tests for the exact failure mode around ŠTEVILKA RAČUN 14001 and generic SEJA, plus a positive RKGV case.
 - A richer persisted projects.metadata explanation was investigated but not introduced yet; no opaque or synthetic evidence was added.
 - Quality gate: topic inference must prefer missing a weak topic over inventing a project/topic from generic words or identifiers.
+
+
+## 2026-10-02 — Evidence → DECIDE v2 foundation
+
+- Life Item evidence is now explicitly source-backed and user-readable: provider, underlying source title, sender and due date are retained with a direct-source relationship marker.
+- The Life Item rebuild now requires at least one traceable evidence row before an item can enter the main Today view.
+- This protects the core product promise: LIFE should explain why an item exists rather than present an opaque generated summary.
+- Added a test for the exact source-backed evidence shape.
+- No synthetic evidence is created; evidence is derived from real obligation/source records.
+- Quality gate: every surfaced Life Item must be traceable to an underlying source, and cross-source relationships must not be inferred from the generated summary itself.
