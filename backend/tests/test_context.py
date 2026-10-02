@@ -24,3 +24,16 @@ def test_explicit_project_hint_is_normalized():
     project = extract_project_hint("[Project: TALUM] priprava sestanka")
     assert project is not None
     assert project.name == "TALUM"
+
+
+from app.context import candidate_topic_names
+
+
+def test_candidate_topic_requires_cross_source_presence():
+    rows = [
+        {"id": "1", "provider": "gmail", "title": "TALUM priprava"},
+        {"id": "2", "provider": "calendar", "title": "TALUM sestanek"},
+        {"id": "3", "provider": "gmail", "title": "račun sestanek"},
+    ]
+    assert "talum" in candidate_topic_names(rows)
+    assert "sestanek" not in candidate_topic_names(rows)
