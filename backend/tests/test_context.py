@@ -117,3 +117,30 @@ def test_life_item_evidence_is_source_backed_shape():
         "due_at": None,
         "relationship": "direct_source",
     }]
+
+
+def test_decide_action_type_prefers_explicit_source_intent():
+    from app.intelligence import _action_type, _next_action
+    rows = [{
+        "id": "1",
+        "provider": "gmail",
+        "title": "Prosimo odgovor do jutri",
+        "summary": "Potrebujemo vaš odgovor na ponudbo.",
+        "sender": "person@example.com",
+        "source_title": "Prosimo odgovor do jutri",
+    }]
+    assert _action_type(rows) == "reply"
+    assert _next_action(rows) == "Odgovori na zahtevo iz povezanega sporočila."
+
+
+def test_decide_action_type_does_not_turn_generic_meeting_into_reply():
+    from app.intelligence import _action_type, _next_action
+    rows = [{
+        "id": "1",
+        "provider": "calendar",
+        "title": "Sestanek TALUM",
+        "summary": "Jutri ob 10:00.",
+        "source_title": "Sestanek TALUM",
+    }]
+    assert _action_type(rows) == "review"
+    assert _next_action(rows) == "Preglej zahtevano vsebino in uredi naslednji korak."
