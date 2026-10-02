@@ -95,7 +95,9 @@ async def graph_get_all(access_token: str, path: str, params: dict | None = None
             next_url = payload.get("@odata.nextLink")
             first = False
     return items[:limit]
-\nasync def list_messages(access_token: str, limit: int = 100) -> list[dict]:
+
+
+async def list_messages(access_token: str, limit: int = 100) -> list[dict]:
     params = {"$top": min(limit, 100), "$select": "id,subject,bodyPreview,receivedDateTime,from,toRecipients,ccRecipients,webLink,isRead"}
     return await graph_get_all(access_token, "/me/mailFolders/inbox/messages", params, limit)
 
