@@ -89,18 +89,45 @@ def _cluster(rows: list[dict[str,Any]]) -> list[list[dict[str,Any]]]:
         else: groups.append([row])
     return groups
 
+def _action_type(rows: list[dict[str,Any]]) -> str:
+    """Infer the smallest evidence-backed user action from source wording."""
+    text = " ".join(_text(r) for r in rows).lower()
+    if any(x in text for x in ("reply", "respond", "response", "odgovor", "odgovori", "sporoči", "answer")):
+        return "reply"
+    if any(x in text for x in ("confirm", "potrdi", "potrdite", "accept", "approve", "odobri")):
+        return "confirm"
+    if any(x in text for x in ("pay", "payment", "plačilo", "plačaj", "nakazilo", "faktura", "račun", "invoice")):
+        return "pay"
+    if any(x in text for x in ("sign", "podpi", "podpis")):
+        return "sign"
+    if any(x in text for x in ("prepare", "pripravi", "dnevni red", "agenda")):
+        return "prepare"
+    if any(x in text for x in ("review", "preglej", "preveri", "comment", "komentar")):
+        return "review"
+    if any(x in text for x in ("follow up", "follow-up", "followup", "čakam", "waiting", "awaiting")):
+        return "follow_up"
+    if any(x in text for x in ("decision", "odločit", "decide")):
+        return "decide"
+    return "review"
+
+
 def _next_action(rows: list[dict[str,Any]]) -> str:
     titles=" ".join((r.get("title") or "") for r in rows).lower()
     category=next((r.get("category") for r in rows if r.get("category")),"other")
     providers={r.get("provider") for r in rows if r.get("provider")}
     titles_lower=titles
+    action_type = _action_type(rows)
+    # Prefer explicit source intent over generic calendar wording.
+    if action_type == "reply": return "Odgovori na zahtevo iz povezanega sporočila."
+    if action_type == "confirm": return "Potrdi zahtevano stvar oziroma termin."
+    if action_type == "pay": return "Preveri račun/fakturo in uredi plačilo oziroma naslednji finančni korak."
+    if action_type == "sign": return "Preglej dokument in ga podpiši, če je vse usklajeno."
+    if action_type == "follow_up": return "Preveri odprto zahtevo in naredi follow-up."
+    if action_type == "decide": return "Preglej odprte točke in sprejmi potrebno odločitev."
     if "calendar" in providers and len(providers)>1 and any(x in titles_lower for x in ("sestanek","meeting","appointment","vabilo","seja","event")):
-        return "Pred dogodkom preglej povezane maile in pripravi ključne točke oziroma odprte odločitve."
-    if any(x in titles for x in ("faktura","račun","invoice")): return "Preveri status računa/fakture in uredi naslednji korak."
-    if any(x in titles for x in ("pogodba","contract","mandate","agreement")): return "Preglej odprte pripombe in pripravi/pošlji naslednji odgovor."
-    if any(x in titles for x in ("waiting for","čakam","awaiting")): return "Preveri, ali je potreben tvoj odgovor ali follow-up."
-    if any(x in titles for x in ("sestanek","meeting")): return "Pripravi ključne točke in odprte odločitve za sestanek."
-    if any(x in titles for x in ("vabilo","seja","appointment","event")): return "Preveri dnevni red, lokacijo in ali potrebuješ pripravo."
+        return "Pred dogodkom preglej povezane vire in pripravi ključne točke."
+    if action_type == "prepare": return "Pripravi zahtevane točke oziroma gradivo."
+    if action_type == "review": return "Preglej zahtevano vsebino in uredi naslednji korak."
     if category=="financial": return "Preveri finančni učinek in uredi naslednji korak."
     if category=="legal": return "Preglej pravni vidik in potrdi naslednji korak."
     if category=="work": return "Preglej povezane informacije in določi naslednji korak."
@@ -174,6 +201,9 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                 # A Life Item without traceable source evidence is not useful enough
                 # for the main Today view. Keep the evidence requirement explicit.
                 evidence_rows = _evidence(group)
+                action_type = _action_type(group)
+                for evidence_row in evidence_rows:
+                    evidence_row["action_type"] = action_type
                 if not evidence_rows:
                     filtered += 1
                     continue
