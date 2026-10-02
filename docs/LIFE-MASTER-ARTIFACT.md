@@ -1055,3 +1055,13 @@ Project inference is intentionally conservative at this stage. LIFE does **not**
 3. Verify counts and representative rows in `context_items`, `people`, `projects`, and `context_relationships`.
 4. Inspect whether person resolution is correctly merging the same person across items.
 5. Only then implement broader project/topic resolution and cross-source linking.
+
+
+## 2026-10-02 — Context Core RLS guardrail correction
+
+- Verified the original 10 Context Core deny policies were `PERMISSIVE`.
+- Replaced all 10 with `AS RESTRICTIVE` policies for `anon` and `authenticated` across all five Context Core tables.
+- Verified `pg_policies.permissive = RESTRICTIVE` for all 10 policies after migration.
+- The change is recorded as a new migration: `20261002090000_make_context_core_deny_policies_restrictive.sql`.
+- Existing migration history was restored rather than rewritten.
+- Supabase security advisor still reports pre-existing RLS/no-policy findings on legacy tables and two SECURITY DEFINER execution warnings; these are separate from the Context Core correction and are not silently changed here.
