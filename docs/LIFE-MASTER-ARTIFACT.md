@@ -989,3 +989,20 @@ Supabase advisor currently reports the new tables as RLS-enabled without policie
 
 ### Next immediate build
 **Context ingestion bridge:** take existing Gmail/Calendar normalized records and persist them as `context_items`, then derive People and Project/Topic candidates from those items without changing Today behavior.
+
+
+### Context ingestion bridge — completed
+
+- [x] Gmail sync writes normalized `context_items`
+- [x] Calendar sync writes normalized `context_items`
+- [x] Context items link back to existing `sources`
+- [x] Existing obligations remain the decision/action layer
+- [x] Existing known obligations are backfilled into Context Core on subsequent sync
+
+The next implementation step is now the **Context Resolution Engine**:
+1. extract people from Gmail/Calendar participants
+2. canonicalize identities
+3. generate Project/Topic candidates
+4. create relationships between source items
+5. attach evidence to obligations/LIFE items
+6. test cross-source linking before Outlook is introduced
