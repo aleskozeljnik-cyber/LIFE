@@ -28,12 +28,15 @@ const events = [
 
 const API_BASE = process.env.NEXT_PUBLIC_LIFE_API_URL || "https://life-production-fd51.up.railway.app";
 const CONNECT_PROVIDERS = [
-  { id: "google", label: "Google", actionLabel: "Connect Google account", description: "LIFE reads Gmail and Google Calendar only. You can revoke access at any time." }
+  { id: "google", label: "Google", actionLabel: "Connect Google account", description: "LIFE reads Gmail and Google Calendar only. You can revoke access at any time." },
+  { id: "microsoft", label: "Microsoft", actionLabel: "Connect Microsoft account", description: "LIFE reads Outlook Mail, Outlook Calendar and Teams chat after Microsoft grants access." }
 ] as const;
 
 export default function LifePage() {
   const [items,setItems] = useState<Item[]>(demoItems);
   const [live,setLive] = useState(false);
+  const [googleConnected,setGoogleConnected] = useState(false);
+  const [microsoftConnected,setMicrosoftConnected] = useState(false);
   const [authChecked,setAuthChecked] = useState(false);
   const [userEmail,setUserEmail] = useState("");
   const [syncing,setSyncing] = useState(false);
@@ -117,11 +120,21 @@ export default function LifePage() {
         const auth=await statusResponse.json();
         const health=await healthResponse.json().catch(()=>({}));
         setAiReady(health?.ai_data_usage==="not_used_for_training");
-        const connected=new URLSearchParams(window.location.search).get("connected")==="1";
-        if(connected){
+        const connectedProvider=new URLSearchParams(window.location.search).get("connected");
+        const connected=connectedProvider==="1" || connectedProvider==="microsoft";
+        setGoogleConnected(Boolean(auth?.google_connected));
+        setMicrosoftConnected(Boolean(auth?.microsoft_connected));
+        if(connectedProvider==="1"){
           await Promise.allSettled([
             fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
             fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
+          ]);
+        }
+        if(connectedProvider==="microsoft"){
+          await Promise.allSettled([
+            fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/teams/sync",{method:"POST",credentials:"include"})
           ]);
           window.history.replaceState({},"",window.location.pathname);
         }
@@ -136,7 +149,7 @@ export default function LifePage() {
             await Promise.allSettled(missing.map(provider=>fetch(API_BASE+"/sources/"+provider+"/sync",{method:"POST",credentials:"include"})));
           }
         }
-        if((auth?.authenticated && auth?.google_connected) || connected){
+        if((auth?.authenticated && (auth?.google_connected || auth?.microsoft_connected)) || connected){
           setLive(true);
           setItems([]);
           setCalendarEvents([]);
@@ -150,7 +163,7 @@ export default function LifePage() {
             const started=Number(sessionStorage.getItem("life_connect_started_at")||0);
             const elapsed=started?Math.max(0,Math.round((Date.now()-started)/1000)):0;
             sessionStorage.removeItem("life_connect_started_at");
-            setNotice(refreshed.success?(elapsed?("First live Today loaded in "+elapsed+"s"):"Google connected"):"Google connected, but live data needs another refresh.");
+            setNotice(refreshed.success?(elapsed?("First live Today loaded in "+elapsed+"s"):(connectedProvider==="microsoft"?"Microsoft connected":"Google connected")):(connectedProvider==="microsoft"?"Microsoft connected, but live data needs another refresh.":"Google connected, but live data needs another refresh."));
           }
         }
       }catch{}
@@ -186,7 +199,7 @@ export default function LifePage() {
   },[items,view,query,done,showAll,live]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
-  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const results=await Promise.all([api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"})]);const blocked=results.some(r=>r.status===503);if(blocked){throw new Error("privacy gate")}if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch(error){const message=error instanceof Error&&error.message==="privacy gate"?"Google source reading is blocked until LIFE AI privacy setup is complete.":"Google sync failed. Please retry.";setSyncError(message);notify(error instanceof Error&&error.message==="privacy gate"?"AI setup required":"Sync failed")}finally{setSyncing(false)}};
+  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const requests=[];if(googleConnected){requests.push(api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"}));}if(microsoftConnected){requests.push(api("/sources/outlook-mail/sync",{method:"POST"}),api("/sources/outlook-calendar/sync",{method:"POST"}),api("/sources/teams/sync",{method:"POST"}));}const results=await Promise.all(requests);const blocked=results.some(r=>r.status===503);if(blocked){throw new Error("privacy gate")}if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch(error){const message=error instanceof Error&&error.message==="privacy gate"?"Google source reading is blocked until LIFE AI privacy setup is complete.":"Google sync failed. Please retry.";setSyncError(message);notify(error instanceof Error&&error.message==="privacy gate"?"AI setup required":"Sync failed")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
   const telemetry=async(action:string,metadata:Record<string,string|number|boolean>={})=>{
     if(!API_BASE) return;
@@ -268,7 +281,7 @@ export default function LifePage() {
         <nav className="card nav">
           <h4>Workspace</h4>
           {(["Today","Needs attention","Inbox","Calendar","Projects","Documents"] as View[]).map(v=><button key={v} className={(view===v||(v==="Needs attention"&&view==="Needs attention"))?"active":""} onClick={()=>{setView(v);setShowAll(false)}}>{v==="Needs attention"?<span className="attention">Needs attention <span className="badge">{attention.length}</span></span>:v}</button>)}
-          <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={connectGoogle}>{live?"Google connected":"Connect Google"}</button><button onClick={openSettings}>Settings</button>
+          <h4>Tools</h4><button onClick={()=>{setSeconds(25*60);setRunning(false);setFocus(true)}}>Focus mode</button><button onClick={connectGoogle}>{googleConnected?"Google connected":"Connect Google"}</button><button onClick={()=>connectProvider("microsoft")}>{microsoftConnected?"Microsoft connected":"Connect Microsoft"}</button><button onClick={openSettings}>Settings</button>
         </nav>
 
         <section className="card main">
@@ -296,7 +309,7 @@ export default function LifePage() {
 
     {selected&&<div className="drawer"><button className="close" onClick={()=>setSelected(null)}>×</button><div className="label">{selected.sourceType}</div><h2>{selected.title}</h2><p>{selected.summary}</p><div className="sourcebox"><b>{selected.source}</b><br/><br/>Priority: {selected.priority}<br/>Due: {selected.due}<br/><br/><b>Next action</b><br/>{selected.nextAction || selected.reason || "Review and decide the next step."}<br/><br/><b>Why LIFE flagged this</b><br/>{selected.reason || "Connected information from your sources."}{selected.evidence?.length ? <><br/><br/><b>Evidence</b>{selected.evidence.map((e:any,i:number)=><div key={i} style={{marginTop:6}}>{e.provider} · {e.title}</div>)}</> : null}</div><div style={{display:"grid",gap:8,marginTop:14}}><button className="cta" onClick={()=>confirmItem(selected.id)}>Confirm</button><button className="secondary" onClick={()=>dismissItem(selected.id)}>Dismiss</button><div style={{borderTop:"1px solid #edf0f2",paddingTop:12,marginTop:4}}><div className="muted" style={{marginBottom:7}}>Correct classification</div><input className="search" style={{width:"100%"}} value={editTitle} onChange={e=>setEditTitle(e.target.value)} placeholder="Correct title (optional)" /><select className="search" style={{width:"100%",marginTop:7}} value={editCategory} onChange={e=>setEditCategory(e.target.value)}><option value="">Keep category</option><option value="financial">Financial</option><option value="work">Work</option><option value="personal">Personal</option><option value="legal">Legal</option><option value="family">Family</option><option value="travel">Travel</option><option value="other">Other</option></select><button className="secondary" style={{marginTop:7,width:"100%"}} onClick={()=>correctItem(selected.id)}>Save correction</button></div></div></div>}
 
-    {settingsOpen&&<div className="drawer"><button className="close" onClick={()=>setSettingsOpen(false)}>×</button><div className="label">Account</div><h2>Settings</h2><p>Control your Google connection and your LIFE data.</p><div className="sourcebox" style={{marginBottom:12}}><b>Google</b><br/>{live?"Connected":"Not connected"}</div><button className="secondary" style={{width:"100%"}} onClick={exportData}>Export my data</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={logout}>Sign out</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={revokeAccess}>Revoke Google access</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={deleteAccount}>Delete LIFE account</button></div>}
+    {settingsOpen&&<div className="drawer"><button className="close" onClick={()=>setSettingsOpen(false)}>×</button><div className="label">Account</div><h2>Settings</h2><p>Control your Google connection and your LIFE data.</p><div className="sourcebox" style={{marginBottom:12}}><b>Google</b><br/>{googleConnected?"Connected":"Not connected"}</div><div className="sourcebox" style={{marginBottom:12}}><b>Microsoft</b><br/>{microsoftConnected?"Connected":"Not connected"}</div><button className="secondary" style={{width:"100%"}} onClick={exportData}>Export my data</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={logout}>Sign out</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={revokeAccess}>Revoke Google access</button><button className="secondary" style={{width:"100%",marginTop:8}} onClick={deleteAccount}>Delete LIFE account</button></div>}
 
     {focus&&<div className="focus"><div className="focusbox"><div className="eyebrow">FOCUS MODE</div><h2>One thing.</h2><div className="muted">Use this screen to work on the next important item.</div><div className="timer">{timerLabel}</div><div style={{display:"flex",gap:8,justifyContent:"center"}}><button className="secondary" onClick={()=>setRunning(x=>!x)}>{running?"Pause":"Start"}</button><button className="secondary" onClick={()=>{setRunning(false);setSeconds(25*60)}}>Reset</button><button className="secondary" onClick={()=>setFocus(false)}>Exit</button></div></div></div>}
     {notice&&<div className="notice">{notice}</div>}
