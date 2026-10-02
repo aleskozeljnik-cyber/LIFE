@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+import re
 
 
 @dataclass(frozen=True)
@@ -68,3 +69,20 @@ def normalize_name(value: str | None) -> str | None:
 
 def item_key(item: NormalizedItem) -> tuple[str, str | None]:
     return item.provider, item.external_id
+
+
+PROJECT_PATTERNS = (
+    re.compile(r"^\s*\[project:\s*(.+?)\]\s*", re.I),
+    re.compile(r"^\s*project:\s*(.+?)(?:\s*[|-]\s*|$)", re.I),
+)
+
+def extract_project_hint(title: str | None) -> ProjectRef | None:
+    if not title:
+        return None
+    for pattern in PROJECT_PATTERNS:
+        match = pattern.search(title)
+        if match:
+            name = match.group(1).strip(" -:|")
+            if name:
+                return ProjectRef(name=name)
+    return None
