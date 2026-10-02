@@ -192,7 +192,7 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     if row:
                         await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
-        topic_candidates = await _resolve_cross_source_topics(cur, user_id)
+            topic_candidates = await _resolve_cross_source_topics(cur, user_id)
         await conn.commit()
     return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered,"messages_sent_to_ai":messages_sent_to_ai,"topic_candidates":topic_candidates}
 
@@ -249,6 +249,6 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                     if row:
                         await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
                         created += 1
-        topic_candidates = await _resolve_cross_source_topics(cur, user_id)
+            topic_candidates = await _resolve_cross_source_topics(cur, user_id)
         await conn.commit()
     return {"events_found":len(events),"obligations_created":created,"events_skipped":skipped,"topic_candidates":topic_candidates}
