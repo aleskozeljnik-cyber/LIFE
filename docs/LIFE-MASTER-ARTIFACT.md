@@ -1314,3 +1314,15 @@ No synthetic Microsoft data is to be inserted to make this gate pass.
 - Existing People records are not deleted or merged retroactively by this change; it changes the behavior of future synchronization.
 - Tests added for accent/punctuation normalization.
 - Quality gate: identity resolution must prefer false negatives over unsafe false-positive person merges when email evidence is absent.
+
+
+## 2026-10-02 — Projects / Topics resolution v2
+
+- Topic candidate extraction is now explicitly conservative and explainable at the lexical layer.
+- Candidate tokens must be shared across at least two providers and pass a distinctiveness check.
+- Pure numeric identifiers such as invoice numbers are rejected as topics.
+- Generic governance/event words already filtered by the resolver remain excluded even when uppercase.
+- A real distinctive anchor such as RKGV remains eligible when it appears across providers.
+- Added tests for the exact failure mode around ŠTEVILKA RAČUN 14001 and generic SEJA, plus a positive RKGV case.
+- A richer persisted projects.metadata explanation was investigated but not introduced yet; no opaque or synthetic evidence was added.
+- Quality gate: topic inference must prefer missing a weak topic over inventing a project/topic from generic words or identifiers.
