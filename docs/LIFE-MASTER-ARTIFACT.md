@@ -1410,3 +1410,37 @@ Quality gate for the next owner refresh:
 
 Important product conclusion:
 **The owner pilot is now being used as an adversarial test set, not merely as a demo dataset.** Every observed false positive becomes a regression test before broader rollout.
+
+
+## 2026-10-02 — Microsoft/Teams connector hardening v1
+
+Before real Microsoft validation, the Graph adapter was reviewed for production-readiness.
+
+Fixed:
+- Microsoft Graph collection reads now follow `@odata.nextLink` pagination instead of silently stopping at the first page.
+- Applied to Outlook Mail, Outlook Calendar, Teams chat list and Teams chat messages.
+- Teams message timestamps are parsed into timezone-aware datetimes before persistence.
+- Teams sender identity now uses an email/mail field when Microsoft provides one, while retaining display-name fallback.
+- Fixed a Teams sync counter initialization issue for `messages_found`.
+
+Verified against current Microsoft Graph documentation:
+- `Chat.Read` is the least-privileged delegated permission for reading messages in the signed-in user's 1:1/group chats; personal Microsoft accounts are not supported for this API. citeturn0search0turn0search3
+- Listing the signed-in user's chats supports delegated `Chat.Read`; channel-message access remains a separate permission path. citeturn0search4turn0search7
+
+Commit:
+- `bf68f120abb3bad75602091ba5c8db7cb90843b0` — Graph collection pagination
+- `759674eeab38a85b6a5e2f4a1e91e64980248932` — Teams sync robustness
+
+Production:
+- Railway deployment `ab06be78-4dd1-4da7-b35e-6bb5f4e00956` — SUCCESS.
+
+Remaining Microsoft validation blocker is unchanged: no tenant-approved Microsoft OAuth credentials are present in production, so no synthetic Microsoft data will be inserted.
+
+### Next product-quality gate
+
+After the next authenticated owner refresh:
+1. confirm the new DECIDE noise gate removes promotional/informational false positives;
+2. confirm explicit actions remain visible;
+3. confirm 14001 stays standalone;
+4. inspect cross-source clusters for false positives/false negatives;
+5. expose source-backed People/Projects in the Life Item detail view once the safe write path is available.
