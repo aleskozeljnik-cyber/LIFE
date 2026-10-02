@@ -1,6 +1,6 @@
 import base64
 from datetime import datetime, timezone
-from email.utils import getaddresses
+from email.utils import getaddresses, parsedate_to_datetime
 from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
@@ -134,6 +134,13 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     try:
                         gmail_occurred_at = datetime.fromtimestamp(int(message["internalDate"]) / 1000, tz=timezone.utc)
                     except (TypeError, ValueError, OSError):
+                        pass
+                if gmail_occurred_at is None and headers.get("date"):
+                    try:
+                        gmail_occurred_at = parsedate_to_datetime(headers["date"])
+                        if gmail_occurred_at.tzinfo is None:
+                            gmail_occurred_at = gmail_occurred_at.replace(tzinfo=timezone.utc)
+                    except (TypeError, ValueError, IndexError):
                         pass
                 item_id = await _persist_context_item(cur, user_id, NormalizedItem(
                     provider="gmail", item_type="message", external_id=external_id,
