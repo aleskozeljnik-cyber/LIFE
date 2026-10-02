@@ -5,7 +5,7 @@ from .config import settings
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MS_AUTH_BASE = "https://login.microsoftonline.com"
-MS_SCOPES = ["openid", "profile", "email", "offline_access", "User.Read", "Mail.Read", "Calendars.Read"]
+MS_SCOPES = ["openid", "profile", "email", "offline_access", "User.Read", "Mail.Read", "Calendars.Read", "Chat.Read"]
 
 
 def authorization_url(state: str) -> str:
@@ -93,4 +93,23 @@ async def list_events(access_token: str, days: int = 14, limit: int = 100) -> li
         "$orderby": "start/dateTime",
     }
     data = await graph_get(access_token, "/me/calendarView", params)
+    return data.get("value", [])
+
+
+async def list_chats(access_token: str, limit: int = 50) -> list[dict]:
+    params = {
+        "$top": min(limit, 50),
+        "$select": "id,topic,chatType,webUrl,lastUpdatedDateTime",
+    }
+    data = await graph_get(access_token, "/me/chats", params)
+    return data.get("value", [])
+
+
+async def list_chat_messages(access_token: str, chat_id: str, limit: int = 50) -> list[dict]:
+    params = {
+        "$top": min(limit, 50),
+        "$select": "id,replyToId,etag,messageType,createdDateTime,lastModifiedDateTime,from,body,webUrl",
+        "$orderby": "createdDateTime desc",
+    }
+    data = await graph_get(access_token, f"/me/chats/{chat_id}/messages", params)
     return data.get("value", [])
