@@ -1180,3 +1180,23 @@ Record for later, not current scope:
 - Do not accept generic uppercase words as topics merely because they are uppercase. Topic candidates must remain distinctive and explainable.
 - Do not add Outlook yet. First complete owner-pilot validation of People → Topics/Projects → Evidence → Life Item/briefing on real data.
 - No synthetic topic/project data is to be seeded to make validation pass.
+
+
+## 2026-10-02 — Context Evidence Layer implemented
+
+### Production change
+- Context Core evidence is now persisted for real provider-normalized items.
+- Project relationships now also create explicit project-link evidence.
+- Life Items now persist source evidence linking the generated Life Item back to the underlying obligation and provider context item.
+- Existing production data was backfilled from existing context/relationship/life-item records only; no synthetic topic, project, obligation, or evidence content was created.
+
+### Production validation
+- Backend evidence deployment: `f94a002c-c4f1-4c0b-9086-4ac93d0a32f6` — SUCCESS.
+- `context_evidence` now contains 59 real `context_source` records, 1 `project_link` record and 2 `life_item_source` records.
+- Current real topic/project state remains: RKGV only; REDNA and SEJA remain removed.
+
+### Quality gate / next correction
+- An older Life Item snapshot still contains a false cross-source grouping around `ŠTEVILKA RAČUN 14001` and the RKGV calendar event. This is treated as a clustering-quality defect, not accepted as product behavior.
+- Next build: strengthen cross-source clustering so provider linkage requires meaningful shared context (canonical person, project/topic evidence, or distinctive temporal/context overlap) rather than weak token coincidence.
+- After that correction, re-run the owner-pilot path end-to-end: People → Topic/Project → Evidence → Life Item → next action.
+- Outlook remains deferred until this owner-pilot Context Resolution path is reliable.
