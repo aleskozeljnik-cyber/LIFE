@@ -4,7 +4,7 @@ from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
 from .calendar import list_upcoming_events
-from .context import NormalizedItem, PersonRef, normalize_email, normalize_name, extract_project_hint, candidate_topic_names, topic_tokens
+from .context import NormalizedItem, PersonRef, normalize_email, normalize_name, extract_project_hint, candidate_topic_names, candidate_topic_from_shared_person, topic_tokens, topic_anchor_tokens
 
 def _decode(data: str) -> str:
     try:
@@ -87,14 +87,25 @@ async def _link_item_project(cur, user_id: str, item_id: str, project_id: str) -
 
 
 async def _resolve_cross_source_topics(cur, user_id: str) -> list[str]:
-    await cur.execute("select id, provider, title from context_items where user_id=%s and title is not null", (user_id,))
+    await cur.execute(
+        """select ci.id, ci.provider, ci.title, ci.occurred_at,
+                  coalesce(array_agg(cr.to_person_id) filter (where cr.to_person_id is not null), '{}') as person_ids
+           from context_items ci
+           left join context_relationships cr
+             on cr.user_id=ci.user_id
+            and cr.from_item_id=ci.id
+            and cr.relationship_type='participant'
+           where ci.user_id=%s and ci.title is not null
+           group by ci.id, ci.provider, ci.title, ci.occurred_at""",
+        (user_id,),
+    )
     rows = await cur.fetchall()
-    names = candidate_topic_names(rows)
+    names = sorted(set(candidate_topic_names(rows)) | set(candidate_topic_from_shared_person(rows)))
     for name in names:
         await cur.execute("insert into projects (user_id,name,normalized_name,kind,status) values (%s,%s,%s,'topic','candidate') on conflict (user_id,normalized_name) do update set updated_at=now() returning id", (user_id,name.upper(),name))
         project_id = (await cur.fetchone())["id"]
         for row in rows:
-            if name in topic_tokens(row.get("title")):
+            if name in topic_tokens(row.get("title")) or name in topic_anchor_tokens(row.get("title")):
                 await _link_item_project(cur, user_id, row["id"], project_id)
     return names
 
