@@ -1154,3 +1154,29 @@ Record for later, not current scope:
 - recent Gmail sync requests observed at approximately 23–69 seconds
 - one request ended with HTTP 499 after the browser/client closed the request
 - target before T1b: validate real sync latency against the MVP requirement of <2 minutes and investigate client cancellation behavior if it recurs
+
+
+## 2026-10-02 — Owner-pilot Context Resolution v2.1 production validation
+
+- Normal authenticated LIFE open now triggers Gmail + Calendar sync automatically for an already-connected Google account; no manual "Sync now" action is required.
+- Production validation after frontend lifecycle fix:
+  - Calendar sync: HTTP 200
+  - Gmail sync: HTTP 200
+  - Gmail sync duration: ~94.7s
+  - Calendar sync duration: ~15.7s
+- Real production Context Core after successful sync:
+  - context_items: 59
+  - Gmail: 56
+  - Calendar: 3
+  - Gmail with occurred_at: 41/56
+  - Calendar with occurred_at: 3/3
+  - people: 54
+  - context_relationships: 115
+- This confirms the explicit Gmail timestamp extraction is working in production for the majority of newly processed Gmail messages. Remaining Gmail rows without occurred_at require provider-payload/path investigation; do not assume they are current or validly timestampable.
+- Cross-source topic validation produced a real candidate:
+  - RKGV
+  - linked to the Calendar event "VABILO 7. REDNA SEJA UO RKGV"
+- The first resolver run also produced false-positive topic candidates "REDNA" and "SEJA" from generic uppercase governance words. These were identified as false positives, removed from derived production data, and the resolver stopword set was strengthened.
+- Do not accept generic uppercase words as topics merely because they are uppercase. Topic candidates must remain distinctive and explainable.
+- Do not add Outlook yet. First complete owner-pilot validation of People → Topics/Projects → Evidence → Life Item/briefing on real data.
+- No synthetic topic/project data is to be seeded to make validation pass.
