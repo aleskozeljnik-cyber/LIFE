@@ -132,7 +132,18 @@ def _group_summary(rows: list[dict[str,Any]]) -> str:
     return titles[0] if titles else "LIFE je povezal informacije iz več virov."
 
 def _evidence(rows: list[dict[str,Any]]) -> list[dict[str,Any]]:
-    return [{"obligation_id":str(r["id"]),"provider":r.get("provider"),"title":r.get("source_title") or r.get("title"),"sender":r.get("sender"),"due_at":r.get("due_at").isoformat() if r.get("due_at") else None} for r in rows]
+    """Build source-backed, user-readable evidence for a Life Item."""
+    evidence = []
+    for r in rows:
+        evidence.append({
+            "obligation_id": str(r["id"]),
+            "provider": r.get("provider"),
+            "title": r.get("source_title") or r.get("title"),
+            "sender": r.get("sender"),
+            "due_at": r.get("due_at").isoformat() if r.get("due_at") else None,
+            "relationship": "direct_source",
+        })
+    return evidence
 
 async def rebuild_life_items(user_id: str) -> dict[str,int]:
     async with await get_connection() as conn:
@@ -160,6 +171,12 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                         d=due_at if due_at.tzinfo else due_at.replace(tzinfo=timezone.utc)
                         if (d-datetime.now(timezone.utc)).total_seconds()<=24*3600: priority="high"
                     except Exception: pass
+                # A Life Item without traceable source evidence is not useful enough
+                # for the main Today view. Keep the evidence requirement explicit.
+                evidence_rows = _evidence(group)
+                if not evidence_rows:
+                    filtered += 1
+                    continue
                 key_tokens=sorted(set().union(*(_context_tokens(r) for r in group)))
                 cluster_key="-".join(key_tokens[:10]) or f"item-{created}"
                 if len(providers)>1: cross_source+=1
@@ -168,7 +185,7 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                   values (%s,%s,%s,%s,%s,%s,%s,%s,'open',%s,%s::jsonb,%s,now(),now())
                   returning id""",
                   (user_id,cluster_key,_group_title(group),_group_summary(group),_next_action(group),priority,category,due_at,
-                   len(providers),__import__("json").dumps(_evidence(group)),max((r.get("confidence") or 0 for r in group),default=0)))
+                   len(providers),__import__("json").dumps(evidence_rows),max((r.get("confidence") or 0 for r in group),default=0)))
                 life_item_id=(await cur.fetchone())["id"]
                 for row in group:
                     if row.get("id") and row.get("source_id"):
