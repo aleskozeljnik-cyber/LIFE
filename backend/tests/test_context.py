@@ -45,3 +45,26 @@ def test_shared_person_can_surface_strong_calendar_anchor():
         {"id": "c1", "provider": "calendar", "title": "VABILO 7. REDNA SEJA UO RKGV", "occurred_at": "2026-10-02T10:00:00+00:00", "person_ids": ["p1"]},
     ]
     assert candidate_topic_from_shared_person(rows) == ["rkvg"]
+
+
+from datetime import timezone
+from app.pipeline import gmail_occurred_at_from_payload
+
+
+def test_gmail_occurred_at_prefers_internal_date():
+    value = gmail_occurred_at_from_payload({
+        "internalDate": "1727863200000",
+        "payload": {"headers": [{"name": "Date", "value": "Mon, 01 Jan 2020 00:00:00 +0000"}]},
+    })
+    assert value is not None
+    assert value.tzinfo == timezone.utc
+    assert value.year == 2024
+
+
+def test_gmail_occurred_at_falls_back_to_rfc_date():
+    value = gmail_occurred_at_from_payload({
+        "payload": {"headers": [{"name": "Date", "value": "Mon, 01 Jan 2024 12:34:56 +0000"}]},
+    })
+    assert value is not None
+    assert value.year == 2024
+    assert value.hour == 12
