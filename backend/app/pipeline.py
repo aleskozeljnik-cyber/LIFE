@@ -160,7 +160,7 @@ async def _resolve_cross_source_topics(cur, user_id: str) -> list[str]:
 
 async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
     messages = await list_recent_messages(access_token, days=7, max_results=100)
-    created = skipped = prefilter_filtered = messages_sent_to_ai = 0
+    created = skipped = prefilter_filtered = messages_sent_to_ai = messages_found = 0
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
             hint = await _hint(cur, user_id)
@@ -439,6 +439,7 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                 if not chat_id:
                     continue
                 chat_messages = await list_teams_chat_messages(access_token, chat_id, limit=50)
+                messages_found += len(chat_messages)
                 chat_title = (chat.get("topic") or chat.get("chatType") or "Teams chat")[:300]
                 for message in chat_messages:
                     external_id = message.get("id")
@@ -503,4 +504,4 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                             created += 1
             topic_candidates = await _resolve_cross_source_topics(cur, user_id)
         await conn.commit()
-    return {"chats_found": len(chats), "messages_found": sum(len(await list_teams_chat_messages(access_token, c.get("id"), limit=50)) for c in chats if c.get("id")), "obligations_created": created, "messages_skipped": skipped, "prefilter_filtered": prefilter_filtered, "messages_sent_to_ai": messages_sent_to_ai, "topic_candidates": topic_candidates}
+    return {"chats_found": len(chats), "messages_found": messages_found, "obligations_created": created, "messages_skipped": skipped, "prefilter_filtered": prefilter_filtered, "messages_sent_to_ai": messages_sent_to_ai, "topic_candidates": topic_candidates}
