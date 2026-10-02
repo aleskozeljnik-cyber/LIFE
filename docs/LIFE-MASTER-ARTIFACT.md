@@ -1030,3 +1030,28 @@ The next implementation step is now the **Context Resolution Engine**:
 This is the evidence baseline for the architecture work. The exact historical Railway variable-edit event for DATABASE_URL is not retained in the repository history, so the artifact records the stronger observable fact: the production process was successfully connecting to the database and serving authenticated real-account data after the correction.
 
 **Security correction:** Context Core Data API access was explicitly locked down immediately after review. anon and authenticated privileges were revoked and explicit deny-all RLS policies were added for all five Context Core tables. Per-user RLS will be enabled as part of the identity/data-boundary work before any direct browser access.
+
+
+## 2026-10-02 — Context Core ingestion/identity progress
+
+### Implemented
+- Context Core tables exist in production and remain deny-by-default for Supabase Data API roles.
+- Gmail and Google Calendar sync persist provider-neutral `context_items`.
+- Context item persistence now returns the canonical item UUID for downstream relationships.
+- Gmail participants are normalized into canonical `people` records using normalized email/name.
+- Calendar attendees are normalized into the same `people` model.
+- Self identity is excluded from participant relationships.
+- Explicit project markers are supported in titles: `[Project: NAME]` and `Project: NAME`.
+- Explicit project hints are normalized into `projects`.
+- Item → person and item → project relationships are persisted idempotently.
+- Added automated test for explicit project hint extraction.
+
+### Important limitation
+Project inference is intentionally conservative at this stage. LIFE does **not** yet infer arbitrary projects from free-form email/calendar text. That will be a separate intelligence step after real owner-pilot data is populated and inspected.
+
+### Next verification
+1. Confirm latest backend deployment is SUCCESS.
+2. Run real Gmail + Calendar sync on the owner account.
+3. Verify counts and representative rows in `context_items`, `people`, `projects`, and `context_relationships`.
+4. Inspect whether person resolution is correctly merging the same person across items.
+5. Only then implement broader project/topic resolution and cross-source linking.
