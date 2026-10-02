@@ -116,3 +116,50 @@ def candidate_topic_names(rows: list[dict]) -> list[str]:
         if len(refs) >= 2 and len(providers) >= 2:
             candidates.append(token)
     return sorted(candidates)
+
+
+def topic_anchor_tokens(title: str | None) -> set[str]:
+    """Return distinctive, explainable anchors suitable for cross-source topic names."""
+    if not title:
+        return set()
+    anchors = set()
+    for raw in re.findall(r"[A-Za-zÀ-ž0-9]{3,}", title):
+        normalized = normalize_name(raw)
+        if not normalized or normalized in TOPIC_STOPWORDS:
+            continue
+        if raw.isupper() and len(raw) >= 3:
+            anchors.add(normalized)
+    return anchors
+
+
+def candidate_topic_from_shared_person(rows: list[dict]) -> list[str]:
+    """Find conservative topic anchors when Gmail and Calendar share a person and time window."""
+    from datetime import timedelta, timezone
+
+    by_person: dict[str, list[dict]] = {}
+    for row in rows:
+        for person_id in row.get("person_ids", []) or []:
+            by_person.setdefault(str(person_id), []).append(row)
+
+    candidates: set[str] = set()
+    for person_rows in by_person.values():
+        gmail = [r for r in person_rows if r.get("provider") == "gmail" and r.get("occurred_at")]
+        calendar = [r for r in person_rows if r.get("provider") == "calendar" and r.get("occurred_at")]
+        for g in gmail:
+            for event in calendar:
+                try:
+                    gt = g["occurred_at"]
+                    ct = event["occurred_at"]
+                    if isinstance(gt, str):
+                        gt = datetime.fromisoformat(gt.replace("Z", "+00:00"))
+                    if isinstance(ct, str):
+                        ct = datetime.fromisoformat(ct.replace("Z", "+00:00"))
+                    if gt.tzinfo is None:
+                        gt = gt.replace(tzinfo=timezone.utc)
+                    if ct.tzinfo is None:
+                        ct = ct.replace(tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    continue
+                if abs(gt - ct) <= timedelta(days=14):
+                    candidates.update(topic_anchor_tokens(event.get("title")))
+    return sorted(candidates)
