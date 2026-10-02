@@ -1232,3 +1232,23 @@ Record for later, not current scope:
 - This is a derived-view quality change only. Source data, context items, people, projects and obligations are not deleted or rewritten.
 - Quality gate for this iteration: Today should surface a maximum of three meaningful items, while weak informational/noise candidates remain available in the underlying source/obligation layers rather than occupying the main LIFE briefing.
 - Next validation: deploy commit 2d7d7118512bf32ca03369c140cf759df090351b, open/refresh LIFE, inspect the resulting top three, and verify that 14001 remains standalone and that low-value messages no longer dominate the briefing.
+
+
+## 2026-10-02 — Phase 1 Owner Pilot: Microsoft foundation
+
+- Microsoft OAuth foundation implemented using Microsoft identity platform authorization-code flow and delegated read permissions: User.Read, Mail.Read, Calendars.Read, offline_access, plus OIDC identity scopes.
+- Microsoft identity is linked into the existing LIFE user model through a nullable users.microsoft_sub; OAuth tokens reuse the existing encrypted oauth_tokens table with provider=microsoft.
+- Outlook Mail and Outlook Calendar are normalized into the existing provider-neutral Context Core: outlook_mail → context_items message; outlook_calendar → context_items calendar_event; participants → canonical People; explicit project hints → Projects / project evidence; extracted obligations → existing obligation pipeline; final output → existing DECIDE / Life Item pipeline.
+- Microsoft Graph production API is implemented against v1.0; message requests use immutable IDs so provider item identity is more stable across mailbox operations. Microsoft documents immutable IDs as the appropriate option when message IDs need to remain stable across mailbox operations.
+- Frontend connection registry now exposes Google and Microsoft using the same provider-card pattern. Live Today now reads the DECIDE /life-items endpoint directly, so the maximum-three meaningful-item rule is visible in the actual UI rather than being bypassed by the legacy obligations endpoint.
+- Provider-aware auto-sync now syncs whichever connected provider(s) the user has, while preserving the existing Google behavior.
+- Production deployments after implementation: backend 8dd33320-e34d-42f3-960f-4ac08a906721 — SUCCESS; frontend c12901c3-b8f6-4722-b4cd-98597c2a1f91 — SUCCESS.
+- Supabase production schema change: users.microsoft_sub plus a partial unique index. The equivalent migration is committed as supabase/migrations/20261002170000_add_microsoft_identity.sql.
+- Current blocker for live Microsoft OAuth validation: Railway does not yet contain Microsoft App Registration credentials (MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET). No credentials were invented or seeded.
+
+### Next exact steps
+1. Configure the Microsoft Entra App Registration with the production redirect URI https://life-production-fd51.up.railway.app/auth/microsoft/callback and delegated Mail.Read / Calendars.Read / User.Read permissions.
+2. Add the client ID and secret to Railway as encrypted environment variables.
+3. Run real owner OAuth → Outlook Mail sync → Outlook Calendar sync.
+4. Validate People + cross-source linking against Google data and inspect evidence.
+5. Then implement Teams as the next P1 connector.
