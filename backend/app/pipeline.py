@@ -56,7 +56,8 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                 external_id = summary.get("id")
                 if not external_id: continue
                 await cur.execute("select id from obligations where user_id=%s and external_id=%s", (user_id, external_id))
-                if await cur.fetchone(): skipped += 1; continue
+                existing_obligation = await cur.fetchone()
+                if existing_obligation: skipped += 1
                 await cur.execute("select id from sources where user_id=%s and provider='gmail' and external_id=%s", (user_id, external_id))
                 existing_source = await cur.fetchone()
                 message = await get_message(access_token, external_id)
@@ -68,6 +69,8 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     title=title[:300], body=text, summary=message.get("snippet", ""),
                     metadata={"gmail_message_id": external_id},
                 ))
+                if existing_obligation:
+                    continue
                 if not is_ai_candidate(text, "email"):
                     prefilter_filtered += 1
                     continue
@@ -102,7 +105,8 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                 external_id = event.get("id")
                 if not external_id: continue
                 await cur.execute("select id from obligations where user_id=%s and external_id=%s", (user_id,external_id))
-                if await cur.fetchone(): skipped += 1; continue
+                existing_obligation = await cur.fetchone()
+                if existing_obligation: skipped += 1
                 await cur.execute("select id from sources where user_id=%s and provider='calendar' and external_id=%s", (user_id,external_id))
                 existing_source = await cur.fetchone()
                 start = event.get("start", {})
@@ -114,6 +118,8 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                     summary=event.get("summary", ""), occurred_at=start_at,
                     metadata={"calendar_event_id": external_id, "location": event.get("location", "")},
                 ))
+                if existing_obligation:
+                    continue
                 extracted = await extract_obligation(text, hint, "calendar")
                 if existing_source:
                     source_id = existing_source["id"]
