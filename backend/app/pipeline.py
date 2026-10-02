@@ -169,6 +169,13 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     project_id = await _persist_project(cur, user_id, project.name)
                     if project_id:
                         await _link_item_project(cur, user_id, item_id, project_id)
+                if existing_source:
+                    source_id = existing_source["id"]
+                    await cur.execute("update sources set last_synced_at=now() where id=%s and user_id=%s", (source_id,user_id))
+                else:
+                    await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'gmail',%s,%s,now()) returning id", (user_id,external_id,text.splitlines()[2][:300] if len(text.splitlines())>2 else "Gmail message"))
+                    source_id = (await cur.fetchone())["id"]
+                await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='gmail' and external_id=%s", (source_id,user_id,external_id))
                 if existing_obligation:
                     continue
                 if not is_ai_candidate(text, "email"):
@@ -179,13 +186,6 @@ async def sync_gmail_and_extract(user_id: str, access_token: str) -> dict:
                     prefilter_filtered += 1
                     continue
                 extracted = await extract_obligation(text, hint, "email")
-                if existing_source:
-                    source_id = existing_source["id"]
-                    await cur.execute("update sources set last_synced_at=now() where id=%s and user_id=%s", (source_id,user_id))
-                else:
-                    await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'gmail',%s,%s,now()) returning id", (user_id,external_id,text.splitlines()[2][:300] if len(text.splitlines())>2 else "Gmail message"))
-                    source_id = (await cur.fetchone())["id"]
-                await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='gmail' and external_id=%s", (source_id,user_id,external_id))
                 if extracted:
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,extracted.due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
                     row = await cur.fetchone()
@@ -232,9 +232,6 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                     project_id = await _persist_project(cur, user_id, project.name)
                     if project_id:
                         await _link_item_project(cur, user_id, item_id, project_id)
-                if existing_obligation:
-                    continue
-                extracted = await extract_obligation(text, hint, "calendar")
                 if existing_source:
                     source_id = existing_source["id"]
                     await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (event.get("summary","Calendar event")[:300],source_id,user_id))
@@ -242,6 +239,9 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                     await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'calendar',%s,%s,now()) returning id", (user_id,external_id,event.get("summary","Calendar event")[:300]))
                     source_id = (await cur.fetchone())["id"]
                 await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='calendar' and external_id=%s", (source_id,user_id,external_id))
+                if existing_obligation:
+                    continue
+                extracted = await extract_obligation(text, hint, "calendar")
                 if extracted:
                     due_at = extracted.due_at or start_at
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))

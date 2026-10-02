@@ -120,16 +120,62 @@ def _group_summary(rows: list[dict[str,Any]]) -> str:
 def _evidence(rows: list[dict[str,Any]]) -> list[dict[str,Any]]:
     return [{"obligation_id":str(r["id"]),"provider":r.get("provider"),"title":r.get("source_title") or r.get("title"),"sender":r.get("sender"),"due_at":r.get("due_at").isoformat() if r.get("due_at") else None} for r in rows]
 
+
+def _context_evidence_links(rows: list[dict[str,Any]], life_item_id: str | None = None) -> list[dict[str,Any]]:
+    """Build explainable, metadata-only evidence links from source items."""
+    links = []
+    for row in rows:
+        context_item_id = row.get("context_item_id")
+        if not context_item_id:
+            continue
+        source_ref = {
+            "provider": row.get("provider"),
+            "external_id": row.get("context_external_id") or row.get("external_id"),
+            "title": row.get("source_title") or row.get("title"),
+        }
+        links.append({
+            "context_item_id": context_item_id,
+            "obligation_id": row.get("id"),
+            "life_item_id": life_item_id,
+            "evidence_type": "life_item_source" if life_item_id else "obligation_source",
+            "source_ref": source_ref,
+        })
+    return links
+
 async def rebuild_life_items(user_id: str) -> dict[str,int]:
     async with await get_connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("""select o.id,o.title,o.summary,o.due_at,o.priority,o.category,o.status,o.sender,o.confidence,s.provider,s.title as source_title
-                                 from obligations o left join sources s on s.id=o.source_id
-                                 where o.user_id=%s and o.status='open' order by o.due_at nulls last,o.created_at desc""",(user_id,))
+            await cur.execute("""select o.id,o.title,o.summary,o.due_at,o.priority,o.category,o.status,o.sender,o.confidence,o.external_id,o.source_id,
+                                        s.provider,s.title as source_title,ci.id as context_item_id,ci.external_id as context_external_id
+                                 from obligations o
+                                 left join sources s on s.id=o.source_id
+                                 left join context_items ci
+                                   on ci.user_id=o.user_id
+                                  and ci.source_id=o.source_id
+                                  and ci.external_id=o.external_id
+                                 where o.user_id=%s and o.status='open'
+                                 order by o.due_at nulls last,o.created_at desc""",(user_id,))
             rows=await cur.fetchall()
             candidates=[r for r in rows if not _noise(r)]
             groups=_cluster(candidates)
             await cur.execute("delete from life_items where user_id=%s",(user_id,))
+            await cur.execute(
+                """delete from context_evidence
+                   where user_id=%s
+                     and evidence_type='obligation_source'
+                     and obligation_id in (
+                         select id from obligations where user_id=%s and status='open'
+                     )""",
+                (user_id,user_id),
+            )
+            for link in _context_evidence_links(candidates):
+                await cur.execute(
+                    """insert into context_evidence
+                       (user_id,context_item_id,obligation_id,evidence_type,source_ref)
+                       values (%s,%s,%s,%s,%s::jsonb)
+                       on conflict do nothing""",
+                    (user_id,link["context_item_id"],link["obligation_id"],link["evidence_type"],__import__("json").dumps(link["source_ref"])),
+                )
             created=cross_source=filtered=0
             for group in groups:
                 action=max((_actionability(r) for r in group),default=0)
@@ -151,9 +197,19 @@ async def rebuild_life_items(user_id: str) -> dict[str,int]:
                 if len(providers)>1: cross_source+=1
                 await cur.execute("""insert into life_items
                   (user_id,cluster_key,title,summary,next_action,priority,category,due_at,status,source_count,evidence,confidence,generated_at,updated_at)
-                  values (%s,%s,%s,%s,%s,%s,%s,%s,'open',%s,%s::jsonb,%s,now(),now())""",
+                  values (%s,%s,%s,%s,%s,%s,%s,%s,'open',%s,%s::jsonb,%s,now(),now())
+                  returning id""",
                   (user_id,cluster_key,_group_title(group),_group_summary(group),_next_action(group),priority,category,due_at,
                    len(providers),__import__("json").dumps(_evidence(group)),max((r.get("confidence") or 0 for r in group),default=0)))
+                life_item_id=(await cur.fetchone())["id"]
+                for link in _context_evidence_links(group, str(life_item_id)):
+                    await cur.execute(
+                        """insert into context_evidence
+                           (user_id,context_item_id,life_item_id,evidence_type,source_ref)
+                           values (%s,%s,%s,%s,%s::jsonb)
+                           on conflict do nothing""",
+                        (user_id,link["context_item_id"],link["life_item_id"],link["evidence_type"],__import__("json").dumps(link["source_ref"])),
+                    )
                 created+=1
         await conn.commit()
     return {"items_created":created,"cross_source_items":cross_source,"filtered_noise":filtered}

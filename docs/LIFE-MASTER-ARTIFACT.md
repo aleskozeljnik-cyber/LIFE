@@ -1180,3 +1180,42 @@ Record for later, not current scope:
 - Do not accept generic uppercase words as topics merely because they are uppercase. Topic candidates must remain distinctive and explainable.
 - Do not add Outlook yet. First complete owner-pilot validation of People → Topics/Projects → Evidence → Life Item/briefing on real data.
 - No synthetic topic/project data is to be seeded to make validation pass.
+
+
+## 2026-10-02 — Context Evidence Bridge implementation
+
+Implemented the next Context Core milestone: source evidence is now bridged into the existing obligation and Life Item layers.
+
+### Implemented
+- Open obligations are matched back to their canonical context items through the existing user/source/external-id identity.
+- Every resolvable open obligation receives an obligation_source evidence record.
+- Every generated Life Item receives a life_item_source evidence record for each resolvable source item in its cluster.
+- Evidence stores only explainable source metadata (provider, external ID, title); raw message/calendar body is not copied into the evidence bridge.
+- Evidence writes are idempotent through partial unique indexes.
+- Life Item regeneration continues to work as before; deleting/rebuilding Life Items does not orphan the obligation-level evidence.
+- Added automated tests for evidence-link generation and the unresolved-source fail-safe.
+
+### Important behavior
+- Evidence linking is additive and does not change Today ranking, filtering, clustering, or next-action generation.
+- If a source item cannot be resolved to a Context Core row, LIFE does not fabricate evidence; the obligation/Life Item remains valid without a false evidence link.
+- Noise-filtered obligations still retain their obligation-level evidence, preserving provenance even when they are intentionally omitted from Today.
+
+### Status
+- [x] Context items persisted
+- [x] People resolved and deduplicated across Gmail/Calendar
+- [x] Conservative Project/Topic resolution validated with real data
+- [x] Obligation to context evidence bridge implemented
+- [x] Life Item to context evidence bridge implemented
+- [x] Evidence idempotency constraints added
+- [x] Automated evidence bridge tests added
+- [ ] Production deployment + real owner sync validation of evidence counts
+- [ ] Validate evidence shown/inspectable in the user-facing flow
+- [ ] Broader project/topic resolution after evidence validation
+- [ ] Outlook adapter
+
+### Next verification
+1. Deploy the current branch to Railway.
+2. Run the authenticated owner Gmail + Calendar sync.
+3. Verify representative context_evidence rows for both obligation_source and life_item_source.
+4. Verify that evidence points to the same canonical context_items used by the People/Project graph.
+5. Only after this passes, proceed to the next Context Resolution intelligence step and then Microsoft/Outlook.
