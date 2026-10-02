@@ -5,6 +5,7 @@ from .db import get_connection
 from .extraction import extract_obligation, is_ai_candidate
 from .gmail import get_message, list_recent_messages
 from .calendar import list_upcoming_events
+from .microsoft import list_messages as list_outlook_messages, list_events as list_outlook_events
 from .context import NormalizedItem, PersonRef, normalize_email, normalize_name, extract_project_hint, candidate_topic_names, candidate_topic_from_shared_person, topic_tokens, topic_anchor_tokens
 
 def _decode(data: str) -> str:
@@ -270,6 +271,152 @@ async def sync_calendar_and_extract(user_id: str, access_token: str) -> dict:
                 await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='calendar' and external_id=%s", (source_id,user_id,external_id))
                 if extracted:
                     due_at = extracted.due_at or start_at
+                    await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
+                    row = await cur.fetchone()
+                    if row:
+                        await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
+                        created += 1
+            topic_candidates = await _resolve_cross_source_topics(cur, user_id)
+        await conn.commit()
+    return {"events_found":len(events),"obligations_created":created,"events_skipped":skipped,"topic_candidates":topic_candidates}
+
+async def sync_outlook_mail_and_extract(user_id: str, access_token: str) -> dict:
+    messages = await list_outlook_messages(access_token, limit=100)
+    created = skipped = prefilter_filtered = messages_sent_to_ai = 0
+    async with await get_connection() as conn:
+        async with conn.cursor() as cur:
+            hint = await _hint(cur, user_id)
+            user_email = await _user_email(cur, user_id)
+            for message in messages:
+                external_id = message.get("id")
+                if not external_id:
+                    continue
+                await cur.execute("select id from obligations where user_id=%s and external_id=%s", (user_id, external_id))
+                existing_obligation = await cur.fetchone()
+                if existing_obligation:
+                    skipped += 1
+                await cur.execute("select id from sources where user_id=%s and provider='outlook_mail' and external_id=%s", (user_id, external_id))
+                existing_source = await cur.fetchone()
+                title = (message.get("subject") or "Outlook message")[:300]
+                sender = ((message.get("from") or {}).get("emailAddress") or {}).get("address")
+                body_preview = message.get("bodyPreview") or ""
+                text = "\n".join(x for x in [f"From: {sender or ''}", f"Subject: {title}", body_preview] if x).strip()
+                received_at = message.get("receivedDateTime")
+                item_id = await _persist_context_item(cur, user_id, NormalizedItem(
+                    provider="outlook_mail", item_type="message", external_id=external_id,
+                    title=title, body=body_preview, summary=body_preview[:500],
+                    source_url=message.get("webLink"), occurred_at=received_at,
+                    metadata={"outlook_message_id": external_id},
+                ))
+                addresses = []
+                if sender:
+                    addresses.append((sender, sender))
+                for bucket in ("toRecipients", "ccRecipients"):
+                    for recipient in message.get(bucket) or []:
+                        addr = ((recipient.get("emailAddress") or {}).get("address"))
+                        name = ((recipient.get("emailAddress") or {}).get("name"))
+                        if addr:
+                            addresses.append((name or addr, addr))
+                for display_name, email in addresses:
+                    email = normalize_email(email)
+                    if not email or email == user_email:
+                        continue
+                    person_id = await _persist_person(cur, user_id, PersonRef(display_name=display_name, email=email))
+                    if person_id:
+                        await _link_item_person(cur, user_id, item_id, person_id)
+                project = extract_project_hint(title)
+                if project:
+                    project_id = await _persist_project(cur, user_id, project.name)
+                    if project_id:
+                        await _link_item_project(cur, user_id, item_id, project_id)
+                if existing_obligation:
+                    continue
+                if not is_ai_candidate(text, "email"):
+                    prefilter_filtered += 1
+                    continue
+                messages_sent_to_ai += 1
+                if messages_sent_to_ai > 8:
+                    prefilter_filtered += 1
+                    continue
+                extracted = await extract_obligation(text, hint, "email")
+                if existing_source:
+                    source_id = existing_source["id"]
+                    await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (title, existing_source["id"], user_id))
+                else:
+                    await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'outlook_mail',%s,%s,now()) returning id", (user_id,external_id,title))
+                    source_id = (await cur.fetchone())["id"]
+                await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='outlook_mail' and external_id=%s", (source_id,user_id,external_id))
+                if extracted:
+                    await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,extracted.due_at,extracted.amount,extracted.currency,sender or extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
+                    row = await cur.fetchone()
+                    if row:
+                        await cur.execute("insert into confidence_logs (user_id,obligation_id,model,confidence,decision) values (%s,%s,%s,%s,%s)", (user_id,row["id"],extracted.model,extracted.confidence,"extracted"))
+                        created += 1
+            topic_candidates = await _resolve_cross_source_topics(cur, user_id)
+        await conn.commit()
+    return {"messages_found":len(messages),"obligations_created":created,"messages_skipped":skipped,"prefilter_filtered":prefilter_filtered,"messages_sent_to_ai":messages_sent_to_ai,"topic_candidates":topic_candidates}
+
+
+async def sync_outlook_calendar_and_extract(user_id: str, access_token: str) -> dict:
+    events = await list_outlook_events(access_token, days=14, limit=100)
+    created = skipped = 0
+    async with await get_connection() as conn:
+        async with conn.cursor() as cur:
+            hint = await _hint(cur, user_id)
+            user_email = await _user_email(cur, user_id)
+            for event in events:
+                external_id = event.get("id")
+                if not external_id:
+                    continue
+                await cur.execute("select id from obligations where user_id=%s and external_id=%s", (user_id, external_id))
+                existing_obligation = await cur.fetchone()
+                if existing_obligation:
+                    skipped += 1
+                await cur.execute("select id from sources where user_id=%s and provider='outlook_calendar' and external_id=%s", (user_id, external_id))
+                existing_source = await cur.fetchone()
+                start = (event.get("start") or {}).get("dateTime")
+                subject = (event.get("subject") or "Outlook event")[:300]
+                location = ((event.get("location") or {}).get("displayName") or "")
+                text = "\n".join(x for x in [f"Event: {subject}", f"Description: {event.get('bodyPreview','')}", f"Start: {start or ''}", f"Location: {location}"] if x)
+                item_id = await _persist_context_item(cur, user_id, NormalizedItem(
+                    provider="outlook_calendar", item_type="calendar_event", external_id=external_id,
+                    title=subject, body=event.get("bodyPreview") or "", summary=subject,
+                    source_url=event.get("webLink"), occurred_at=start,
+                    metadata={"outlook_event_id": external_id, "location": location},
+                ))
+                attendees = []
+                for attendee in event.get("attendees") or []:
+                    addr = ((attendee.get("emailAddress") or {}).get("address"))
+                    name = ((attendee.get("emailAddress") or {}).get("name"))
+                    if addr:
+                        attendees.append((name or addr, addr))
+                organizer = ((event.get("organizer") or {}).get("emailAddress") or {})
+                if organizer.get("address"):
+                    attendees.append((organizer.get("name") or organizer["address"], organizer["address"]))
+                for display_name, email in attendees:
+                    email = normalize_email(email)
+                    if not email or email == user_email:
+                        continue
+                    person_id = await _persist_person(cur, user_id, PersonRef(display_name=display_name, email=email))
+                    if person_id:
+                        await _link_item_person(cur, user_id, item_id, person_id)
+                project = extract_project_hint(subject)
+                if project:
+                    project_id = await _persist_project(cur, user_id, project.name)
+                    if project_id:
+                        await _link_item_project(cur, user_id, item_id, project_id)
+                if existing_obligation:
+                    continue
+                extracted = await extract_obligation(text, hint, "calendar")
+                if existing_source:
+                    source_id = existing_source["id"]
+                    await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (subject, existing_source["id"], user_id))
+                else:
+                    await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'outlook_calendar',%s,%s,now()) returning id", (user_id,external_id,subject))
+                    source_id = (await cur.fetchone())["id"]
+                await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='outlook_calendar' and external_id=%s", (source_id,user_id,external_id))
+                if extracted:
+                    due_at = extracted.due_at or start
                     await cur.execute("insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id", (user_id,source_id,external_id,extracted.title,extracted.summary,due_at,extracted.amount,extracted.currency,extracted.sender,extracted.category,extracted.priority,extracted.classification_reason,extracted.confidence))
                     row = await cur.fetchone()
                     if row:
