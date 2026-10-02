@@ -285,6 +285,12 @@ async def outlook_calendar_sync(life_session: str | None = Cookie(default=None))
     result = await run_user_sync(user_id, "outlook_calendar")
     return {"provider": "outlook_calendar", "result": result["outlook_calendar"]}
 
+@app.post("/sources/teams/sync")
+async def teams_sync(life_session: str | None = Cookie(default=None)):
+    user_id = current_user(life_session)
+    result = await run_user_sync(user_id, "teams")
+    return {"provider": "teams", "result": result["teams"]}
+
 @app.post("/sources/{source_id}/sync")
 async def sync_source(source_id: str, life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
