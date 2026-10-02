@@ -26,7 +26,7 @@ def test_explicit_project_hint_is_normalized():
     assert project.name == "TALUM"
 
 
-from app.context import candidate_topic_names
+from app.context import candidate_topic_names, candidate_topic_from_shared_person
 
 
 def test_candidate_topic_requires_cross_source_presence():
@@ -37,3 +37,11 @@ def test_candidate_topic_requires_cross_source_presence():
     ]
     assert "talum" in candidate_topic_names(rows)
     assert "sestanek" not in candidate_topic_names(rows)
+
+
+def test_shared_person_can_surface_strong_calendar_anchor():
+    rows = [
+        {"id": "g1", "provider": "gmail", "title": "Dopis članom", "occurred_at": "2026-10-01T09:00:00+00:00", "person_ids": ["p1"]},
+        {"id": "c1", "provider": "calendar", "title": "VABILO 7. REDNA SEJA UO RKGV", "occurred_at": "2026-10-02T10:00:00+00:00", "person_ids": ["p1"]},
+    ]
+    assert candidate_topic_from_shared_person(rows) == ["rkvg"]
