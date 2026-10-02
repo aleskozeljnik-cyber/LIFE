@@ -10,6 +10,7 @@ from .calendar import list_upcoming_events
 from .config import settings
 from .db import get_connection
 from .google import authorization_url, exchange_code, fetch_userinfo, revoke_token
+from .microsoft import authorization_url as microsoft_authorization_url, exchange_code as microsoft_exchange_code, fetch_userinfo as microsoft_fetch_userinfo
 from .intelligence import get_today_life_items
 from .jobs import get_google_access_token, run_user_sync
 from .summary import generate_today_summary
@@ -116,13 +117,62 @@ async def auth_status(life_session: str | None = Cookie(default=None)):
             async with conn.cursor() as cur:
                 await cur.execute("select id,email,name from users where id=%s", (user_id,))
                 user = await cur.fetchone()
-                await cur.execute("select 1 from oauth_tokens where user_id=%s and provider='google' limit 1", (user_id,))
-                connected = await cur.fetchone() is not None
+                await cur.execute("select provider from oauth_tokens where user_id=%s and provider in ('google','microsoft')", (user_id,))
+                providers = {row["provider"] for row in await cur.fetchall()}
+                connected = "google" in providers
+                microsoft_connected = "microsoft" in providers
         if not user:
             return {"authenticated": False, "google_connected": False}
-        return {"authenticated": True, "google_connected": connected, "user": user}
+        return {"authenticated": True, "google_connected": connected, "microsoft_connected": microsoft_connected, "user": user}
     except HTTPException:
         return {"authenticated": False, "google_connected": False}
+
+@app.get("/auth/microsoft/start")
+def microsoft_start():
+    if not settings.microsoft_client_id or not settings.microsoft_client_secret:
+        raise HTTPException(status_code=503, detail="Microsoft OAuth is not configured")
+    state = new_state()
+    redirect = RedirectResponse(microsoft_authorization_url(state), status_code=303)
+    redirect.set_cookie("life_oauth_state", state, httponly=True, secure=True, samesite="none", max_age=600)
+    return redirect
+
+@app.get("/auth/microsoft/callback")
+async def microsoft_callback(code: str, state: str, response: Response, life_oauth_state: str | None = Cookie(default=None)):
+    try:
+        read_state(state)
+        if not life_oauth_state or life_oauth_state != state:
+            raise ValueError("OAuth state mismatch")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+    tokens = await microsoft_exchange_code(code)
+    userinfo = await microsoft_fetch_userinfo(tokens["access_token"])
+    if not real_data_processing_allowed():
+        raise HTTPException(status_code=503, detail=f"Real-data processing blocked: AI data policy is {ai_data_usage_status()}. Configure a provider with no training use before connecting user data.")
+    microsoft_sub = userinfo.get("id")
+    email = (userinfo.get("mail") or userinfo.get("userPrincipalName") or "").strip().lower()
+    name = userinfo.get("displayName")
+    async with await get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("select id from users where microsoft_sub=%s or (email=%s and %s <> '') limit 1", (microsoft_sub,email,email))
+            existing = await cur.fetchone()
+            if existing:
+                user_id = existing["id"]
+                await cur.execute("update users set microsoft_sub=coalesce(microsoft_sub,%s), email=coalesce(email,%s), name=coalesce(%s,name), updated_at=now() where id=%s", (microsoft_sub,email,name,user_id))
+            else:
+                await cur.execute("insert into users (microsoft_sub,email,name) values (%s,%s,%s) returning id", (microsoft_sub,email,name))
+                user_id = (await cur.fetchone())["id"]
+            await cur.execute("""insert into oauth_tokens (user_id,provider,access_token_encrypted,refresh_token_encrypted,expires_at,scopes)
+                values (%s,'microsoft',%s,%s,now()+(%s || ' seconds')::interval,%s)
+                on conflict (user_id,provider) do update set access_token_encrypted=excluded.access_token_encrypted,
+                refresh_token_encrypted=coalesce(excluded.refresh_token_encrypted,oauth_tokens.refresh_token_encrypted),expires_at=excluded.expires_at,scopes=excluded.scopes,updated_at=now()""",
+                (user_id,encrypt_token(tokens["access_token"]),encrypt_token(tokens["refresh_token"]) if tokens.get("refresh_token") else None,tokens.get("expires_in",3600),tokens.get("scope","").split()))
+        await conn.commit()
+    target = settings.frontend_url.rstrip("/") + "/?connected=microsoft"
+    redirect = RedirectResponse(target,status_code=303)
+    redirect.delete_cookie("life_oauth_state",secure=True,samesite="none")
+    redirect.set_cookie("life_session",sign_session(str(user_id)),httponly=True,secure=True,samesite="none",max_age=60*60*24*30)
+    await record_usage_event(str(user_id),"authorization_connected",{"provider":"microsoft","status":"success"})
+    return redirect
 
 @app.post("/auth/logout")
 def logout(response: Response):
@@ -222,6 +272,18 @@ async def calendar_sync(life_session: str | None = Cookie(default=None)):
     user_id = current_user(life_session)
     result = await run_user_sync(user_id, "calendar")
     return {"provider": "calendar", "result": result["calendar"]}
+
+@app.post("/sources/outlook-mail/sync")
+async def outlook_mail_sync(life_session: str | None = Cookie(default=None)):
+    user_id = current_user(life_session)
+    result = await run_user_sync(user_id, "outlook_mail")
+    return {"provider": "outlook_mail", "result": result["outlook_mail"]}
+
+@app.post("/sources/outlook-calendar/sync")
+async def outlook_calendar_sync(life_session: str | None = Cookie(default=None)):
+    user_id = current_user(life_session)
+    result = await run_user_sync(user_id, "outlook_calendar")
+    return {"provider": "outlook_calendar", "result": result["outlook_calendar"]}
 
 @app.post("/sources/{source_id}/sync")
 async def sync_source(source_id: str, life_session: str | None = Cookie(default=None)):
