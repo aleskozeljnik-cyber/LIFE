@@ -109,12 +109,10 @@ export default function LifePage() {
         const connectedParam=new URLSearchParams(window.location.search).get("connected");
         const connected=connectedParam==="1" || connectedParam==="microsoft";
         if(connected){
-          await Promise.allSettled([
-            fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"})
-          ]);
+          const connectSyncCalls=[];
+          if(connectedParam==="1") connectSyncCalls.push(fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"}));
+          if(connectedParam==="microsoft") connectSyncCalls.push(fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}));
+          await Promise.allSettled(connectSyncCalls);
           window.history.replaceState({},"",window.location.pathname);
         }
         if(auth?.authenticated && (auth?.google_connected || auth?.microsoft_connected)){
@@ -127,8 +125,6 @@ export default function LifePage() {
             if(auth?.google_connected) syncCalls.push(fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"}));
             if(auth?.microsoft_connected) syncCalls.push(fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}));
             await Promise.allSettled(syncCalls);
-            await Promise.allSettled([
-              ]);
           }
           const refreshed=await refreshLive();
           await telemetry("app_opened");
@@ -139,7 +135,7 @@ export default function LifePage() {
             const started=Number(sessionStorage.getItem("life_connect_started_at")||0);
             const elapsed=started?Math.max(0,Math.round((Date.now()-started)/1000)):0;
             sessionStorage.removeItem("life_connect_started_at");
-            setNotice(refreshed.success?(elapsed?("First live Today loaded in "+elapsed+"s"):"Google connected"):"Google connected, but live data needs another refresh.");
+            setNotice(refreshed.success?(elapsed?("First live Today loaded in "+elapsed+"s"):(connectedParam==="microsoft"?"Microsoft connected":"Google connected")):(connectedParam==="microsoft"?"Microsoft connected, but live data needs another refresh.":"Google connected, but live data needs another refresh."));
           }
         }
       }catch{}
@@ -151,10 +147,14 @@ export default function LifePage() {
   useEffect(()=>{
     if(!live || !API_BASE) return;
     const t=setInterval(async()=>{
-      await Promise.allSettled([
-        fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
-        fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
-      ]);
+      try{
+        const status=await api("/auth/status");
+        const auth=await status.json();
+        const calls=[];
+        if(auth?.google_connected) calls.push(api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"}));
+        if(auth?.microsoft_connected) calls.push(api("/sources/outlook-mail/sync",{method:"POST"}),api("/sources/outlook-calendar/sync",{method:"POST"}));
+        await Promise.allSettled(calls);
+      }catch{}
       await refreshLive();
     },15*60*1000);
     return ()=>clearInterval(t);
