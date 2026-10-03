@@ -194,3 +194,25 @@ def test_google_revoke_does_not_delete_microsoft_credentials():
     source = inspect.getsource(revoke)
     assert "delete from oauth_tokens where user_id=%s and provider='google'" in source
     assert "delete from oauth_tokens where user_id=%s" not in source
+
+
+def test_user_export_covers_context_core_without_oauth_secrets():
+    import inspect
+    from app.main import export_user
+
+    source = inspect.getsource(export_user)
+    for table in (
+        "life_items",
+        "context_items",
+        "people",
+        "projects",
+        "context_relationships",
+        "context_evidence",
+        "confidence_logs",
+        "usage_logs",
+    ):
+        assert f'from {table} where user_id=%s' in source
+
+    assert "oauth_tokens" not in source
+    assert "access_token_encrypted" not in source
+    assert "refresh_token_encrypted" not in source
