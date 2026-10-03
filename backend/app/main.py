@@ -230,6 +230,14 @@ async def export_user(life_session: str | None = Cookie(default=None)):
                 ("obligations", "select id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence,status,source_id,created_at,updated_at from obligations where user_id=%s"),
                 ("corrections", "select id,obligation_id,field_name,old_value,new_value,created_at from corrections where user_id=%s"),
                 ("summaries", "select summary_date,content,created_at from daily_summaries where user_id=%s"),
+                ("life_items", "select id,cluster_key,title,summary,next_action,priority,category,due_at,status,source_count,evidence,confidence,generated_at,updated_at from life_items where user_id=%s"),
+                ("context_items", "select id,source_id,external_id,item_type,provider,account_key,title,body,summary,source_url,occurred_at,created_at,updated_at,metadata from context_items where user_id=%s"),
+                ("people", "select id,display_name,normalized_name,primary_email,normalized_email,phone,metadata,created_at,updated_at from people where user_id=%s"),
+                ("projects", "select id,name,normalized_name,kind,status,metadata,created_at,updated_at from projects where user_id=%s"),
+                ("context_relationships", "select id,from_item_id,to_item_id,from_person_id,to_person_id,project_id,relationship_type,confidence,evidence,created_at from context_relationships where user_id=%s"),
+                ("context_evidence", "select id,context_item_id,obligation_id,life_item_id,evidence_type,source_ref,created_at from context_evidence where user_id=%s"),
+                ("confidence_logs", "select id,obligation_id,model,confidence,decision,created_at from confidence_logs where user_id=%s"),
+                ("usage_logs", "select id,action,metadata,created_at from usage_logs where user_id=%s"),
             ]:
                 await cur.execute(query, (user_id,))
                 data[name] = await cur.fetchall()
