@@ -1599,3 +1599,180 @@ After production deployment, verify:
 4. provider disconnect/delete semantics remain isolated;
 5. cross-user scoping remains explicit before returning to real Microsoft-data validation.
 
+
+## 2026-10-03 — Integration blocker registry and work-account fallback strategy
+
+This is now a first-class product requirement: every blocked integration must be explicitly recorded with:
+- exact blocker;
+- whether the blocker is technical, provider-policy, tenant-policy or user-action dependent;
+- what can be prepared without access;
+- the safest supported fallback;
+- what remains unavailable through the fallback;
+- the exact action needed to unlock the full integration.
+
+### Current hard blocker — Microsoft work account
+
+**Status:** BLOCKED for real-data validation in the current production owner environment.
+
+Exact blocker:
+- production does not have tenant-approved Microsoft OAuth credentials configured;
+- the owner's work Microsoft account is controlled by an organization tenant;
+- delegated Microsoft Graph access may require organizational consent depending on tenant policy and requested permissions;
+- Teams access is especially tenant/policy sensitive. Microsoft documents delegated/application consent paths and recommends least privilege. citeturn0search2turn0search3
+
+This is **not** a LIFE application bug and must not be bypassed by:
+- scraping Outlook/Teams;
+- using browser session cookies;
+- asking the user for passwords;
+- inserting synthetic Microsoft data;
+- using an unapproved service account;
+- circumventing tenant security controls.
+
+### Supported integration ladder
+
+LIFE must support the following paths, in this order:
+
+**Tier A — Direct delegated Microsoft Graph OAuth**
+- user signs in with the work Microsoft account;
+- tenant permits the application and requested delegated permissions;
+- LIFE receives user-scoped tokens;
+- Outlook Mail + Calendar + Teams are synchronized into the provider-neutral Context Core.
+
+This remains the target path for the owner pilot.
+
+**Tier B — Tenant-approved LIFE application**
+- register LIFE as a multitenant Entra application;
+- obtain the organization's admin consent where required;
+- document exact requested permissions and least-privilege rationale;
+- then perform normal user-scoped OAuth.
+
+Microsoft supports applications for work/school accounts and multitenant configurations; the exact consent requirement is controlled by the organization's Entra policy. citeturn0search8turn0search9
+
+**Tier C — In-tenant sanctioned bridge**
+If direct external OAuth is not allowed, LIFE should be prepared to accept data through an organization-approved automation/integration bridge, for example an in-tenant Power Automate/Logic Apps flow or approved webhook/export mechanism.
+
+The bridge must:
+- be explicitly approved by the organization;
+- send only the minimum permitted data;
+- identify the LIFE user and source account;
+- preserve provider/source/external IDs;
+- preserve timestamps and evidence;
+- be revocable;
+- never require the user's Microsoft password.
+
+This is a fallback architecture, not a security bypass.
+
+**Tier D — Read-only fallback**
+Where the organization allows only user-controlled exports/subscriptions:
+- Outlook calendar publication/ICS can provide read-only calendar context where enabled;
+- approved mail forwarding or rule-based forwarding can provide selected mail context where the organization's policy permits external forwarding;
+- manual file/document import can cover selected information.
+
+These fallbacks are deliberately classified as **partial integrations**:
+- they do not provide complete Teams;
+- they may be delayed;
+- they may omit metadata/thread structure;
+- they must not be presented to the user as equivalent to Graph synchronization.
+
+### Important Teams limitation
+
+The Microsoft Graph path for Teams chat is not interchangeable with arbitrary Outlook access. LIFE must keep Teams as a separate capability with its own permission/consent state. Microsoft documents delegated `Chat.Read` for the signed-in user's 1:1/group chats, while channel-message access follows a separate permission path. citeturn0search2turn0search3
+
+Therefore the UI and backend must eventually expose connector health at capability level, for example:
+- Microsoft identity: CONNECTED
+- Outlook Mail: CONNECTED / BLOCKED
+- Outlook Calendar: CONNECTED / BLOCKED
+- Teams Chat: CONNECTED / BLOCKED
+
+A connected Microsoft identity must never imply that every Microsoft capability is available.
+
+### Personal / non-work Microsoft path
+
+For a user who connects a personal Microsoft account, LIFE should support the personal-account OAuth path where the selected Microsoft Graph APIs support it. Microsoft explicitly distinguishes personal Microsoft accounts from work/school accounts, and Outlook mail/calendar APIs support both account categories for delegated access. citeturn0search0turn0search1turn0search6
+
+Teams must remain capability-specific because Microsoft documents different support/permission constraints for personal accounts.
+
+### Product consequence: WORK + HOME + FAMILY must be provider-neutral
+
+The product must not model a user's life as:
+- work = Microsoft;
+- home = Google;
+- family = Apple.
+
+Instead it must model:
+
+`PERSON → SOURCES → CONTEXT → PEOPLE → PROJECTS/TOPICS → OBLIGATIONS → TODAY`
+
+A single Project/Topic may contain:
+- work Outlook mail;
+- work Teams;
+- private Gmail;
+- family calendar;
+- holiday booking/document;
+- children's appointments;
+- parents' appointments;
+- shared household tasks.
+
+The provider is metadata, not the user's life boundary.
+
+### Family / household integration strategy
+
+For children, parents and shared household context, LIFE should not require those people to have their own LIFE accounts.
+
+Initial supported patterns:
+1. shared calendar the user already has access to;
+2. calendar invitations/events involving family members;
+3. user-authorized email/document sources;
+4. explicit People records created/confirmed by the user.
+
+The identity graph should allow:
+- child;
+- parent;
+- spouse/partner;
+- household;
+- school;
+- doctor/service provider;
+- work colleague;
+without forcing every person into a separate account.
+
+### Blocker reporting rule
+
+From this point forward, every development status must contain a **BLOCKERS** section when an integration or validation step cannot be completed.
+
+Format:
+- **BLOCKED:** exact capability
+- **WHY:** exact external dependency
+- **CAN DO NOW:** code/tests/UI/data model that can be completed safely
+- **FALLBACK:** supported alternative, if any
+- **NOT POSSIBLE:** what the fallback cannot prove
+- **UNLOCK:** exact user/admin/provider action required
+
+No blocker may be silently converted into "done".
+
+### Immediate development consequence
+
+While the work Microsoft account is blocked, development continues on:
+1. delete/export/privacy completeness;
+2. provider-capability state model;
+3. Microsoft consent/error UX;
+4. personal Microsoft account path;
+5. family/shared-calendar source modeling;
+6. connector test fixtures that use provider-neutral normalized records only.
+
+Real Microsoft validation remains blocked until an approved work-account path exists.
+
+### Architectural target
+
+The long-term LIFE connector architecture must support multiple acquisition methods per provider:
+
+`DIRECT_OAUTH | TENANT_BRIDGE | WEBHOOK | ICS | FORWARDING | FILE_IMPORT`
+
+Each method must declare:
+- capabilities;
+- freshness;
+- completeness;
+- permission state;
+- source provenance;
+- revocation method.
+
+This allows LIFE to remain useful even when one ecosystem imposes organizational restrictions, without weakening privacy or security.
