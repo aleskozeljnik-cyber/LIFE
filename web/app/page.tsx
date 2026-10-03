@@ -175,10 +175,25 @@ export default function LifePage() {
   useEffect(()=>{
     if(!live || !API_BASE) return;
     const t=setInterval(async()=>{
-      await Promise.allSettled([
-        fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
-        fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
-      ]);
+      try{
+        const statusResponse=await fetch(API_BASE+"/auth/status",{credentials:"include"});
+        const auth=await statusResponse.json();
+        const syncCalls: Promise<Response>[]=[];
+        if(auth?.google_connected){
+          syncCalls.push(
+            fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
+          );
+        }
+        if(auth?.microsoft_connected){
+          syncCalls.push(
+            fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}),
+            fetch(API_BASE+"/sources/teams/sync",{method:"POST",credentials:"include"})
+          );
+        }
+        await Promise.allSettled(syncCalls);
+      }catch{}
       await refreshLive();
     },15*60*1000);
     return ()=>clearInterval(t);
