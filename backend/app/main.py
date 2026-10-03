@@ -191,11 +191,13 @@ async def revoke(response: Response, life_session: str | None = Cookie(default=N
                     await revoke_token(decrypt_token(token["access_token_encrypted"]))
                 except Exception:
                     pass
-            await cur.execute("delete from oauth_tokens where user_id=%s", (user_id,))
+            # Disconnect only the provider explicitly represented by this endpoint.
+            # Microsoft credentials must never be deleted as a side effect of
+            # revoking Google access.
+            await cur.execute("delete from oauth_tokens where user_id=%s and provider='google'", (user_id,))
         await conn.commit()
-    response.delete_cookie("life_session")
     await record_usage_event(str(user_id), "authorization_revoked", {"provider": "google", "status": "success"})
-    return {"status": "revoked"}
+    return {"status": "google_revoked"}
 
 @app.post("/telemetry")
 async def telemetry_event(payload: dict, life_session: str | None = Cookie(default=None)):
