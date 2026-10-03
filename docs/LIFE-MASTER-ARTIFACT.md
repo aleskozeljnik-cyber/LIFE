@@ -1570,3 +1570,32 @@ With Microsoft periodic sync and Teams source linkage now hardened, the next ste
 ### Next quality gate
 
 After the deployment completes, continue with production privacy-boundary validation: provider connect/disconnect isolation, export/delete completeness, cross-user scoping, then real-data Context Core validation once Microsoft tenant credentials are approved.
+
+## 2026-10-03 — User export completeness hardening
+
+- Production privacy review found that `/users/me/export` exported the legacy user/source/obligation/correction/summary layers but omitted the newer Context Core and Life Item data.
+- Fixed in PR #15, merge commit `9010760cd27bdce0075ab8413ea13879760a22e1`.
+- User export now includes:
+  - Life Items
+  - Context Items
+  - People
+  - Projects
+  - Context Relationships
+  - Context Evidence
+  - confidence logs
+  - metadata-only usage logs
+- OAuth credentials are intentionally excluded from export: no `oauth_tokens`, access-token ciphertext or refresh-token ciphertext is returned.
+- All exported tables remain explicitly scoped by the authenticated `user_id`; no cross-user joins were introduced.
+- Added regression test `test_user_export_covers_context_core_without_oauth_secrets`.
+- Vercel preview deployments for the PR completed successfully for both backend and life frontend before merge.
+- Railway production deployment after merge is the next verification point; this milestone is not marked production-success until the new main commit is confirmed running.
+
+### Next quality gate
+
+After production deployment, verify:
+1. export endpoint contains the new Context Core datasets;
+2. no OAuth secret fields can escape;
+3. delete-user cascade covers Context Core and Life Items;
+4. provider disconnect/delete semantics remain isolated;
+5. cross-user scoping remains explicit before returning to real Microsoft-data validation.
+
