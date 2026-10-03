@@ -216,3 +216,12 @@ def test_user_export_covers_context_core_without_oauth_secrets():
     assert "oauth_tokens" not in source
     assert "access_token_encrypted" not in source
     assert "refresh_token_encrypted" not in source
+
+def test_microsoft_capability_status_is_scope_based():
+    import inspect
+    from app.main import auth_status
+
+    source = inspect.getsource(auth_status)
+    assert '"outlook_mail": microsoft_connected and "Mail.Read" in microsoft_scopes' in source
+    assert '"outlook_calendar": microsoft_connected and "Calendars.Read" in microsoft_scopes' in source
+    assert '"teams_chat": microsoft_connected and "Chat.Read" in microsoft_scopes' in source
