@@ -1523,3 +1523,20 @@ Do not add more inference yet. First validate the production Life Item drawer ag
 3. Cross-user leakage must remain impossible through the enrichment query.
 4. Teams context items must retain source/evidence linkage even when they do not become obligations.
 5. Microsoft providers should join the 15-minute sync loop once real tenant credentials are available.
+
+## 2026-10-03 — Microsoft periodic sync production fix
+
+- Re-validated the repository state before changing code. The previous assumption that provider-aware periodic sync was already present in the production frontend was incorrect: commit f3fdedfffba077da8823df38e6f16afa5a8c90dc changed the stale root app/page.tsx, while Railway production frontend is configured from /web.
+- The production frontend web/app/page.tsx still had a 15-minute loop that always called only Gmail + Google Calendar.
+- Implemented the smallest safe correction in commit 6034561e554cbbf537f7441b13775369cc02f83a: the 15-minute loop now checks /auth/status and synchronizes only actually connected providers:
+  - Google: Gmail + Google Calendar
+  - Microsoft: Outlook Mail + Outlook Calendar + Teams chat
+- No database/schema changes.
+- No synthetic Microsoft/Teams records.
+- No permission or authentication bypass.
+- Pull request #12 was merged with merge commit 34816e781ca6178ccb24c960ac5dcfe17f5a0e32.
+- Frontend production build completed successfully: Next.js compiled successfully, TypeScript validity check passed, static page generation completed successfully.
+- Railway production backend deployment bd41b53a-128b-4fa3-b44b-a67810c4b49b — SUCCESS.
+- Railway production frontend deployment c79d0296-74ea-4a80-a449-403126d7d9e7 — SUCCESS.
+- Microsoft real-data validation remains blocked by the existing tenant-credential blocker. The periodic sync path is now ready for real Microsoft accounts without inventing data.
+- Teams source/evidence quality and People/Project validation remain the next quality gates; no inference logic was changed in this step.
