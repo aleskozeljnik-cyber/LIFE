@@ -1540,3 +1540,19 @@ Do not add more inference yet. First validate the production Life Item drawer ag
 - Railway production frontend deployment c79d0296-74ea-4a80-a449-403126d7d9e7 — SUCCESS.
 - Microsoft real-data validation remains blocked by the existing tenant-credential blocker. The periodic sync path is now ready for real Microsoft accounts without inventing data.
 - Teams source/evidence quality and People/Project validation remain the next quality gates; no inference logic was changed in this step.
+
+## 2026-10-03 — Teams source/evidence linkage hardening
+
+- Real-code inspection found a concrete Context Core integrity gap in sync_teams_and_extract: context_source evidence was already created by _persist_context_item, but the Teams sources row and context_items.source_id were created only after the AI prefilter. A real Teams message rejected as noise could therefore lose the provider source linkage even though the normalized context item and evidence existed.
+- Fixed in merge commit 70462ddb0ae119c79eacccb2e5e12d5de2c9f102. The real Teams source is now created/updated before context item persistence; source_id is carried into the normalized context item, and the existing AI prefilter remains unchanged.
+- Added regression test test_teams_source_is_linked_before_context_persistence_and_prefilter in backend/tests/test_context.py.
+- The regression invariant was executed against the production branch source: source creation occurs before _persist_context_item and _persist_context_item occurs before is_ai_candidate.
+- No synthetic Teams data was created and no Microsoft credentials were added.
+- Production backend deployment 07575339-9d94-4dd9-ac6f-f57f35a991ff — SUCCESS.
+- Production frontend deployment a8e83800-95f6-4d5c-af0b-1fbcd5d08c31 — SUCCESS.
+- Backend startup completed successfully after deployment.
+- Microsoft/Teams real-data validation remains blocked by the existing tenant credential blocker; this fix is therefore validated structurally and through production deployment, not by fabricating pilot records.
+
+### Next quality gate
+
+With Microsoft periodic sync and Teams source linkage now hardened, the next step is to inspect the real owner-pilot Context Core data after Microsoft tenant approval. Do not add new inference until real Microsoft data is available; specifically validate People merge, Project relationships, evidence rows and Today behavior across Google + Microsoft + Teams.
