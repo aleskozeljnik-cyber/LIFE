@@ -37,6 +37,7 @@ export default function LifePage() {
   const [live,setLive] = useState(false);
   const [googleConnected,setGoogleConnected] = useState(false);
   const [microsoftConnected,setMicrosoftConnected] = useState(false);
+  const [microsoftCapabilities,setMicrosoftCapabilities] = useState({outlook_mail:false,outlook_calendar:false,teams_chat:false});
   const [authChecked,setAuthChecked] = useState(false);
   const [userEmail,setUserEmail] = useState("");
   const [syncing,setSyncing] = useState(false);
@@ -124,6 +125,11 @@ export default function LifePage() {
         const connected=connectedProvider==="1" || connectedProvider==="microsoft";
         setGoogleConnected(Boolean(auth?.google_connected));
         setMicrosoftConnected(Boolean(auth?.microsoft_connected));
+        setMicrosoftCapabilities({
+          outlook_mail: Boolean(auth?.microsoft_capabilities?.outlook_mail),
+          outlook_calendar: Boolean(auth?.microsoft_capabilities?.outlook_calendar),
+          teams_chat: Boolean(auth?.microsoft_capabilities?.teams_chat)
+        });
         if(connectedProvider==="1"){
           await Promise.allSettled([
             fetch(API_BASE+"/sources/gmail/sync",{method:"POST",credentials:"include"}),
@@ -131,11 +137,11 @@ export default function LifePage() {
           ]);
         }
         if(connectedProvider==="microsoft"){
-          await Promise.allSettled([
-            fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/teams/sync",{method:"POST",credentials:"include"})
-          ]);
+          const microsoftConnectSyncCalls: Promise<Response>[] = [];
+          if(auth?.microsoft_capabilities?.outlook_mail) microsoftConnectSyncCalls.push(fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}));
+          if(auth?.microsoft_capabilities?.outlook_calendar) microsoftConnectSyncCalls.push(fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}));
+          if(auth?.microsoft_capabilities?.teams_chat) microsoftConnectSyncCalls.push(fetch(API_BASE+"/sources/teams/sync",{method:"POST",credentials:"include"}));
+          await Promise.allSettled(microsoftConnectSyncCalls);
           window.history.replaceState({},"",window.location.pathname);
         }
         if(auth?.authenticated && auth?.google_connected && !connected){
@@ -185,13 +191,9 @@ export default function LifePage() {
             fetch(API_BASE+"/sources/calendar/sync",{method:"POST",credentials:"include"})
           );
         }
-        if(auth?.microsoft_connected){
-          syncCalls.push(
-            fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}),
-            fetch(API_BASE+"/sources/teams/sync",{method:"POST",credentials:"include"})
-          );
-        }
+        if(auth?.microsoft_capabilities?.outlook_mail) syncCalls.push(fetch(API_BASE+"/sources/outlook-mail/sync",{method:"POST",credentials:"include"}));
+        if(auth?.microsoft_capabilities?.outlook_calendar) syncCalls.push(fetch(API_BASE+"/sources/outlook-calendar/sync",{method:"POST",credentials:"include"}));
+        if(auth?.microsoft_capabilities?.teams_chat) syncCalls.push(fetch(API_BASE+"/sources/teams/sync",{method:"POST",credentials:"include"}));
         await Promise.allSettled(syncCalls);
       }catch{}
       await refreshLive();
@@ -214,7 +216,7 @@ export default function LifePage() {
   },[items,view,query,done,showAll,live]);
 
   const notify=(s:string)=>{setNotice(s);setTimeout(()=>setNotice(""),2200)};
-  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const requests=[];if(googleConnected){requests.push(api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"}));}if(microsoftConnected){requests.push(api("/sources/outlook-mail/sync",{method:"POST"}),api("/sources/outlook-calendar/sync",{method:"POST"}),api("/sources/teams/sync",{method:"POST"}));}const results=await Promise.all(requests);const blocked=results.some(r=>r.status===503);if(blocked){throw new Error("privacy gate")}if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch(error){const message=error instanceof Error&&error.message==="privacy gate"?"Google source reading is blocked until LIFE AI privacy setup is complete.":"Google sync failed. Please retry.";setSyncError(message);notify(error instanceof Error&&error.message==="privacy gate"?"AI setup required":"Sync failed")}finally{setSyncing(false)}};
+  const syncNow=async()=>{if(!live||syncing)return;setSyncing(true);setSyncError("");try{const requests=[];if(googleConnected){requests.push(api("/sources/gmail/sync",{method:"POST"}),api("/sources/calendar/sync",{method:"POST"}));}if(microsoftCapabilities.outlook_mail) requests.push(api("/sources/outlook-mail/sync",{method:"POST"}));if(microsoftCapabilities.outlook_calendar) requests.push(api("/sources/outlook-calendar/sync",{method:"POST"}));if(microsoftCapabilities.teams_chat) requests.push(api("/sources/teams/sync",{method:"POST"}));const results=await Promise.all(requests);const blocked=results.some(r=>r.status===503);if(blocked){throw new Error("privacy gate")}if(results.some(r=>!r.ok)) throw new Error("sync failed");const refreshed=await refreshLive();refreshed.success?notify("Synced just now"):notify("Sync completed with warnings")}catch(error){const message=error instanceof Error&&error.message==="privacy gate"?"Google source reading is blocked until LIFE AI privacy setup is complete.":"Google sync failed. Please retry.";setSyncError(message);notify(error instanceof Error&&error.message==="privacy gate"?"AI setup required":"Sync failed")}finally{setSyncing(false)}};
   const api=async(path:string,init?:RequestInit)=>fetch(API_BASE+path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers||{})}});
   const telemetry=async(action:string,metadata:Record<string,string|number|boolean>={})=>{
     if(!API_BASE) return;
