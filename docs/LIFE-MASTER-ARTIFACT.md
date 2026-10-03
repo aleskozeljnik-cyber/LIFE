@@ -1556,3 +1556,17 @@ Do not add more inference yet. First validate the production Life Item drawer ag
 ### Next quality gate
 
 With Microsoft periodic sync and Teams source linkage now hardened, the next step is to inspect the real owner-pilot Context Core data after Microsoft tenant approval. Do not add new inference until real Microsoft data is available; specifically validate People merge, Project relationships, evidence rows and Today behavior across Google + Microsoft + Teams.
+
+## 2026-10-03 — Provider revoke isolation hardening
+
+- Found a concrete privacy/security bug in `/auth/revoke`: the endpoint revoked Google access but deleted **all** OAuth tokens for the user, which could silently disconnect Microsoft as a side effect.
+- Fixed in merge commit `2d53bfe2473599ec8703b0a6d944c80f5732d045`.
+- `/auth/revoke` now deletes only the Google OAuth token and no longer deletes Microsoft credentials.
+- Added regression test `test_google_revoke_does_not_delete_microsoft_credentials`.
+- No schema changes and no Microsoft data changes.
+- Railway production deployments for this merge were triggered for backend and frontend; at the time of this artifact update they were still in `BUILDING` state, so this change is **not yet marked production-success**.
+- Product/UI note: the existing Settings action is explicitly `Revoke Google access`; Microsoft remains independently connected. A separate Microsoft disconnect/revoke flow should be added only when its semantics are defined correctly for Microsoft identity/token lifecycle.
+
+### Next quality gate
+
+After the deployment completes, continue with production privacy-boundary validation: provider connect/disconnect isolation, export/delete completeness, cross-user scoping, then real-data Context Core validation once Microsoft tenant credentials are approved.
