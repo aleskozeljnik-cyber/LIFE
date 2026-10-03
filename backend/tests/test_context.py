@@ -176,3 +176,13 @@ def test_decide_keeps_explicit_action_request_actionable():
         "due_at": None,
     }
     assert _actionability(row) >= 0.55
+
+def test_teams_source_is_linked_before_context_persistence_and_prefilter():
+    import inspect
+    from app.pipeline import sync_teams_and_extract
+
+    source = inspect.getsource(sync_teams_and_extract)
+    source_pos = source.index("select id from sources")
+    context_pos = source.index("_persist_context_item")
+    prefilter_pos = source.index("is_ai_candidate")
+    assert source_pos < context_pos < prefilter_pos

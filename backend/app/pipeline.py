@@ -494,12 +494,20 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                         body,
                     ] if x).strip()
                     title = f"{chat_title} · {sender_name or 'Teams message'}"[:300]
+                    await cur.execute("select id from sources where user_id=%s and provider='teams' and external_id=%s", (user_id, external_id))
+                    existing_source = await cur.fetchone()
+                    if existing_source:
+                        source_id = existing_source["id"]
+                        await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (title, source_id, user_id))
+                    else:
+                        await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'teams',%s,%s,now()) returning id", (user_id, external_id, title))
+                        source_id = (await cur.fetchone())["id"]
                     item_id = await _persist_context_item(cur, user_id, NormalizedItem(
                         provider="teams", item_type="message", external_id=external_id,
                         title=title, body=body, summary=body[:500],
                         source_url=message.get("webUrl") or chat.get("webUrl"),
                         occurred_at=occurred_at,
-                        metadata={"teams_message_id": external_id, "teams_chat_id": chat_id, "chat_title": chat_title},
+                        metadata={"teams_message_id": external_id, "teams_chat_id": chat_id, "chat_title": chat_title, "source_id": str(source_id)},
                     ))
                     if sender_name and sender_name.lower() != (user_email or "").lower():
                         person_id = await _persist_person(cur, user_id, PersonRef(display_name=sender_name, email=sender_email or None))
@@ -510,6 +518,7 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                         project_id = await _persist_project(cur, user_id, project.name)
                         if project_id:
                             await _link_item_project(cur, user_id, item_id, project_id)
+                    await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='teams' and external_id=%s", (source_id, user_id, external_id))
                     if existing_obligation:
                         continue
                     if not is_ai_candidate(text, "email"):
@@ -520,15 +529,6 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                         prefilter_filtered += 1
                         continue
                     extracted = await extract_obligation(text, hint, "email")
-                    await cur.execute("select id from sources where user_id=%s and provider='teams' and external_id=%s", (user_id, external_id))
-                    existing_source = await cur.fetchone()
-                    if existing_source:
-                        source_id = existing_source["id"]
-                        await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (title, source_id, user_id))
-                    else:
-                        await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'teams',%s,%s,now()) returning id", (user_id, external_id, title))
-                        source_id = (await cur.fetchone())["id"]
-                    await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='teams' and external_id=%s", (source_id, user_id, external_id))
                     if extracted:
                         await cur.execute(
                             "insert into obligations (user_id,source_id,external_id,title,summary,due_at,amount,currency,sender,category,priority,classification_reason,confidence) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (user_id,external_id) do nothing returning id",
