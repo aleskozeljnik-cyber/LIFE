@@ -1803,3 +1803,8 @@ The target is **60/100**, but the score may only be raised from verified product
 ## Continuation rule
 
 The half-hour auto-run executes exactly the next unfinished checkpoint in this list. It must never skip ahead because a later task appears easier. The master artifact remains the source of truth.
+
+
+## 2026-10-03 — 36h autorun execution model
+
+The 72-gate 47→60 push is scheduled as two offset hourly autoruns: one executes gates 1,3,5,...,71 at :00 and the other executes gates 2,4,6,...,72 at :30. Together this creates one LIFE development checkpoint every 30 minutes for 36 hours (72 checkpoints total). The two runs share this artifact as the only source of truth and must verify the previous checkpoint before proceeding.
