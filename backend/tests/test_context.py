@@ -186,3 +186,11 @@ def test_teams_source_is_linked_before_context_persistence_and_prefilter():
     context_pos = source.index("_persist_context_item")
     prefilter_pos = source.index("is_ai_candidate")
     assert source_pos < context_pos < prefilter_pos
+
+def test_google_revoke_does_not_delete_microsoft_credentials():
+    import inspect
+    from app.main import revoke
+
+    source = inspect.getsource(revoke)
+    assert "delete from oauth_tokens where user_id=%s and provider='google'" in source
+    assert "delete from oauth_tokens where user_id=%s" not in source
