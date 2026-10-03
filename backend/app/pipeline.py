@@ -494,6 +494,14 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                         body,
                     ] if x).strip()
                     title = f"{chat_title} · {sender_name or 'Teams message'}"[:300]
+                    await cur.execute("select id from sources where user_id=%s and provider='teams' and external_id=%s", (user_id, external_id))
+                    existing_source = await cur.fetchone()
+                    if existing_source:
+                        source_id = existing_source["id"]
+                        await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (title, source_id, user_id))
+                    else:
+                        await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'teams',%s,%s,now()) returning id", (user_id, external_id, title))
+                        source_id = (await cur.fetchone())["id"]
                     item_id = await _persist_context_item(cur, user_id, NormalizedItem(
                         provider="teams", item_type="message", external_id=external_id,
                         title=title, body=body, summary=body[:500],
@@ -510,14 +518,6 @@ async def sync_teams_and_extract(user_id: str, access_token: str) -> dict:
                         project_id = await _persist_project(cur, user_id, project.name)
                         if project_id:
                             await _link_item_project(cur, user_id, item_id, project_id)
-                    await cur.execute("select id from sources where user_id=%s and provider='teams' and external_id=%s", (user_id, external_id))
-                    existing_source = await cur.fetchone()
-                    if existing_source:
-                        source_id = existing_source["id"]
-                        await cur.execute("update sources set last_synced_at=now(), title=%s where id=%s and user_id=%s", (title, source_id, user_id))
-                    else:
-                        await cur.execute("insert into sources (user_id,provider,external_id,title,last_synced_at) values (%s,'teams',%s,%s,now()) returning id", (user_id, external_id, title))
-                        source_id = (await cur.fetchone())["id"]
                     await cur.execute("update context_items set source_id=%s, updated_at=now() where user_id=%s and provider='teams' and external_id=%s", (source_id, user_id, external_id))
                     if existing_obligation:
                         continue
