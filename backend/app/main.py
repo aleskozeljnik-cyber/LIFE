@@ -117,13 +117,21 @@ async def auth_status(life_session: str | None = Cookie(default=None)):
             async with conn.cursor() as cur:
                 await cur.execute("select id,email,name from users where id=%s", (user_id,))
                 user = await cur.fetchone()
-                await cur.execute("select provider from oauth_tokens where user_id=%s and provider in ('google','microsoft')", (user_id,))
-                providers = {row["provider"] for row in await cur.fetchall()}
+                await cur.execute("select provider, scopes from oauth_tokens where user_id=%s and provider in ('google','microsoft')", (user_id,))
+                provider_rows = await cur.fetchall()
+                providers = {row["provider"]: set(row.get("scopes") or []) for row in provider_rows}
                 connected = "google" in providers
                 microsoft_connected = "microsoft" in providers
+                microsoft_scopes = providers.get("microsoft", set())
+                microsoft_capabilities = {
+                    "identity": microsoft_connected,
+                    "outlook_mail": microsoft_connected and "Mail.Read" in microsoft_scopes,
+                    "outlook_calendar": microsoft_connected and "Calendars.Read" in microsoft_scopes,
+                    "teams_chat": microsoft_connected and "Chat.Read" in microsoft_scopes,
+                }
         if not user:
             return {"authenticated": False, "google_connected": False}
-        return {"authenticated": True, "google_connected": connected, "microsoft_connected": microsoft_connected, "user": user}
+        return {"authenticated": True, "google_connected": connected, "microsoft_connected": microsoft_connected, "microsoft_capabilities": microsoft_capabilities, "user": user}
     except HTTPException:
         return {"authenticated": False, "google_connected": False}
 
